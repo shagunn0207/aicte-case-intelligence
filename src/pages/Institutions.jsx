@@ -85,15 +85,15 @@ export default function Institutions() {
           </thead>
           <tbody>
             {items.map((inst) => (
-              <tr key={inst.id} className="border-t border-slate-200">
+              <tr key={inst.institution_id} className="border-t border-slate-200">
                 <td className="px-4 py-2">{inst.name || '-'} </td>
-                <td className="px-4 py-2">{inst.permanent_id || '-'} </td>
+                <td className="px-4 py-2">{inst.institution_id || '-'} </td>
                 <td className="px-4 py-2">{inst.region || inst.state || '-'} </td>
-                <td className="px-4 py-2 text-center">{inst.total_cases ?? '-'} </td>
-                <td className="px-4 py-2 text-center">{inst.pending_cases ?? '-'} </td>
+                <td className="px-4 py-2 text-center">{inst.case_count ?? 0}</td>
+                <td className="px-4 py-2 text-center">—</td>
                 <td className="px-4 py-2">
                   <button
-                    onClick={() => navigate(`/institutions/${inst.id}`)}
+                    onClick={() => navigate(`/institutions/${encodeURIComponent(inst.institution_id)}`)}
                     className="px-3 py-1 bg-aicte-navy text-white rounded text-sm"
                   >
                     View
