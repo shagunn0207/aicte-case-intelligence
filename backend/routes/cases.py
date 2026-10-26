@@ -1,20 +1,24 @@
 from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status as http_status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, or_
 from sqlalchemy.orm import Session, joinedload
 
 from backend.database import get_db
-from backend.models import ComplaintCase, Institution, CaseAction
+from backend.models import ComplaintCase, Institution, CaseAction, CoordinationReview
 from backend.schemas import (
     CaseListResponse,
     CaseSummary,
     CaseDetailResponse,
     CaseActionSchema,
     CaseUpdate,
-    InstitutionSimple
+    InstitutionSimple,
+    CaseLinksResponse,
+    CaseLinkItem
 )
 from backend.services.case_workflow import update_case_workflow
+from backend.services.deadlines import get_current_utc_time
+from backend.matching import derive_stable_overlap_id
 
 router = APIRouter(prefix="/api/cases", tags=["Complaint Cases"])
 
@@ -28,13 +32,14 @@ def list_cases(
     category: Optional[str] = Query(None, description="Filter by Complaint Category"),
     from_date: Optional[datetime] = Query(None, description="Filter cases received on or after this ISO-8601 timestamp"),
     to_date: Optional[datetime] = Query(None, description="Filter cases received on or before this ISO-8601 timestamp"),
+    overdue: Optional[bool] = Query(None, description="Filter cases by overdue status (true/false)"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page (max 100)"),
     db: Session = Depends(get_db)
 ):
     """
     Retrieve paginated list of complaint cases with flexible multi-attribute filtering.
-    Filters can be combined (institution_id, bureau, status, region, category, date range).
+    Filters can be combined (institution_id, bureau, status, region, category, date range, overdue).
     Sorts deterministically by newest received_date first, with case_id as tie-breaker.
     """
     # Validate date range
@@ -82,6 +87,37 @@ def list_cases(
         normalized_to = to_date.replace(tzinfo=None) if to_date.tzinfo else to_date
         stmt = stmt.where(ComplaintCase.received_date <= normalized_to)
         count_stmt = count_stmt.where(ComplaintCase.received_date <= normalized_to)
+
+    # Overdue filter: A case is overdue if due_date < current_time AND status != 'Disposed'
+    # Missing due dates or disposed cases are never overdue.
+    if overdue is not None:
+        now = get_current_utc_time()
+        if overdue is True:
+            stmt = stmt.where(
+                ComplaintCase.status != "Disposed",
+                ComplaintCase.due_date.isnot(None),
+                ComplaintCase.due_date < now
+            )
+            count_stmt = count_stmt.where(
+                ComplaintCase.status != "Disposed",
+                ComplaintCase.due_date.isnot(None),
+                ComplaintCase.due_date < now
+            )
+        else:
+            stmt = stmt.where(
+                or_(
+                    ComplaintCase.status == "Disposed",
+                    ComplaintCase.due_date.is_(None),
+                    ComplaintCase.due_date >= now
+                )
+            )
+            count_stmt = count_stmt.where(
+                or_(
+                    ComplaintCase.status == "Disposed",
+                    ComplaintCase.due_date.is_(None),
+                    ComplaintCase.due_date >= now
+                )
+            )
 
     total = db.scalar(count_stmt) or 0
 
@@ -199,5 +235,83 @@ def update_case(
         updated_at=refreshed_case.updated_at,
         institution=institution_info,
         action_history=[CaseActionSchema.model_validate(a) for a in sorted_actions]
+    )
+
+
+@router.get("/{case_id}/links", response_model=CaseLinksResponse)
+def get_case_links(
+    case_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieve confirmed case-to-case coordination links for a complaint case.
+    Searches CoordinationReview records whether the case is primary or secondary.
+    Returns 404 if the case does not exist.
+    Only confirmed coordination determinations ("Coordination Required") are returned;
+    unreviewed candidate overlaps and unrelated pairs are strictly excluded.
+    Preserves all original cases without merging or data loss.
+    """
+    # 1. Verify case exists
+    target_case = db.query(ComplaintCase).filter(ComplaintCase.case_id == case_id).first()
+    if not target_case:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=f"Complaint case with ID '{case_id}' was not found."
+        )
+
+    # 2. Query CoordinationReview for confirmed coordination relationships
+    # Only confirmed reviews (status or reviewer_decision == 'Coordination Required')
+    confirmed_reviews = (
+        db.query(CoordinationReview)
+        .filter(
+            or_(
+                CoordinationReview.primary_case_id == case_id,
+                CoordinationReview.secondary_case_id == case_id
+            ),
+            or_(
+                CoordinationReview.status == "Coordination Required",
+                CoordinationReview.reviewer_decision == "Coordination Required"
+            )
+        )
+        .order_by(CoordinationReview.reviewed_at.desc(), CoordinationReview.id.desc())
+        .all()
+    )
+
+    links = []
+    for rev in confirmed_reviews:
+        # Determine the counterpart linked case ID
+        linked_id = rev.secondary_case_id if rev.primary_case_id == case_id else rev.primary_case_id
+
+        # Look up counterpart case details for rich context
+        linked_case = db.query(ComplaintCase).filter(ComplaintCase.case_id == linked_id).first()
+
+        overlap_id = derive_stable_overlap_id(rev.primary_case_id, rev.secondary_case_id)
+
+        links.append(
+            CaseLinkItem(
+                link_id=rev.id,
+                case_id=case_id,
+                linked_case_id=linked_id,
+                overlap_id=overlap_id,
+                primary_case_id=rev.primary_case_id,
+                secondary_case_id=rev.secondary_case_id,
+                decision=rev.reviewer_decision or rev.status,
+                status=rev.status,
+                reviewer=rev.reviewed_by,
+                reviewed_at=rev.reviewed_at,
+                similarity_score=rev.similarity_score,
+                overlap_reason=rev.overlap_reason,
+                remarks=rev.reviewer_remarks,
+                created_at=rev.created_at,
+                linked_case_bureau=linked_case.bureau if linked_case else None,
+                linked_case_status=linked_case.status if linked_case else None,
+                linked_case_category=linked_case.category if linked_case else None
+            )
+        )
+
+    return CaseLinksResponse(
+        case_id=case_id,
+        total_links=len(links),
+        links=links
     )
 

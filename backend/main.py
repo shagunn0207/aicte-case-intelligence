@@ -9,6 +9,7 @@ from backend.routes.cases import router as cases_router
 from backend.routes.actions import router as actions_router
 from backend.routes.overlaps import router as overlaps_router
 from backend.routes.dashboard import router as dashboard_router
+from backend.routes.alerts import router as alerts_router
 from backend.schemas import HealthResponse
 
 
@@ -63,6 +64,7 @@ app.include_router(cases_router)
 app.include_router(actions_router)
 app.include_router(overlaps_router)
 app.include_router(dashboard_router)
+app.include_router(alerts_router)
 
 
 @app.get("/", tags=["System"])

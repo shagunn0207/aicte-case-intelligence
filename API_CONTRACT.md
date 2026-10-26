@@ -150,8 +150,14 @@ GET /api/cases
 | `category` | string | No | Case-insensitive partial filter by category |
 | `from_date` | datetime | No | Cases received on or after timestamp |
 | `to_date` | datetime | No | Cases received on or before timestamp |
+| `overdue` | boolean | No | Filter cases by overdue status (`true`/`false`). Excludes disposed cases |
 | `page` | integer | No | 1-based page index (Default `1`) |
 | `page_size` | integer | No | Items per page (Default `20`, Max `100`) |
+
+All case summary items dynamically expose computed SLA deadline indicators:
+- `is_overdue`: `boolean` (true if past deadline and not disposed)
+- `days_overdue`: `integer` (calendar days past due, 0 if not overdue)
+- `is_approaching_deadline`: `boolean` (true if due within upcoming 48 hours)
 
 ---
 
@@ -178,6 +184,9 @@ Returns full dossier, nested institution details, and deterministically sorted c
   "last_action": "Explanation sought from Principal with 7-day compliance window",
   "next_action": "Evaluate institution response and verify bank transaction ledgers",
   "last_action_at": "2026-10-21T10:00:00",
+  "is_overdue": false,
+  "days_overdue": 0,
+  "is_approaching_deadline": false,
   "created_at": "2026-10-04T10:00:00",
   "updated_at": "2026-10-21T10:00:00",
   "institution": {
@@ -187,20 +196,56 @@ Returns full dossier, nested institution details, and deterministically sorted c
     "region": "Uttar Pradesh",
     "institution_type": "Engineering & Technology"
   },
-  "action_history": [
+  "action_history": []
+}
+```
+
+---
+
+### 3.6 Explicit Case-to-Case Link Retrieval
+
+```http
+GET /api/cases/{case_id}/links
+```
+
+Retrieves confirmed cross-bureau coordination relationships for a specific complaint case. The relationship is discovered bidirectionally (whether the requested case was recorded as primary or secondary in human review).
+
+#### Query Rules
+- **Confirmed Only**: Only formal determinations of `Coordination Required` are returned. Unreviewed algorithmic candidates (`Pending Review`), `Not Related`, or `Continue Independently` determinations are strictly excluded.
+- **Safety Guarantee**: Original complaint records and their respective action histories remain 100% independent and intact without merging or data destruction.
+
+#### Response (200 OK)
+```json
+{
+  "case_id": "DEMO-CASE-001",
+  "total_links": 1,
+  "links": [
     {
-      "id": 2,
+      "link_id": 1,
       "case_id": "DEMO-CASE-001",
-      "action_taken": "Interim response received from college management",
-      "action_by": "Dr. R. K. Sharma (PGRC)",
-      "action_date": "2026-10-21T10:00:00",
-      "remarks": "Institution claimed cash was towards outsourced software test preparation.",
-      "next_action": "Evaluate institution response and verify bank transaction ledgers",
-      "previous_status": "Under Process",
-      "new_status": "Under Process"
+      "linked_case_id": "DEMO-CASE-002",
+      "overlap_id": "OVL-DEMO-CASE-001-DEMO-CASE-002",
+      "primary_case_id": "DEMO-CASE-001",
+      "secondary_case_id": "DEMO-CASE-002",
+      "decision": "Coordination Required",
+      "status": "Coordination Required",
+      "reviewer": "Dr. Ananya Roy (Joint Director)",
+      "reviewed_at": "2026-10-24T14:30:00",
+      "similarity_score": 0.88,
+      "overlap_reason": "Concurrent capitation fee collection and unapproved intake expansion",
+      "remarks": "Combined inquiry ordered under PGRC and Approval Bureau",
+      "created_at": "2026-10-20T10:00:00",
+      "linked_case_bureau": "Approval Bureau",
+      "linked_case_status": "Under Process",
+      "linked_case_category": "Unapproved Intake Expansion"
     }
   ]
 }
+```
+
+#### Error Responses
+- `404 Not Found`: Complaint case ID was not found in the registry.
+
 ```
 
 ---
@@ -414,6 +459,85 @@ Computes live statistics directly from SQLite database records and the shared de
   "recent_overlaps": []
 }
 ```
+
+---
+
+### 3.12 In-App Actionable Alert Feed
+
+```http
+GET /api/alerts
+```
+
+Returns a unified, real-time stream of prioritized, actionable alerts across AICTE bureaus.
+Alerts are aggregated dynamically from:
+1. **Overdue Cases**: Non-disposed cases past statutory SLA deadline.
+2. **Approaching Deadlines**: Non-disposed cases expiring within the upcoming 48 hours.
+3. **Overlaps Pending Review**: Candidate cross-bureau correlations with high similarity awaiting review.
+
+All alerts are sorted strictly by urgency:
+- Primary sort by severity: `CRITICAL` > `HIGH` > `MEDIUM` > `LOW`.
+- Sub-sorting: overdue cases with more elapsed days appear first; approaching deadlines with fewer remaining hours appear first; pending reviews with higher similarity appear first.
+- Disposed cases and cases with missing due dates never generate deadline alerts.
+- When an overlap review is submitted (`Not Related`, `Coordination Required`, etc.), its pending alert is automatically suppressed.
+
+#### Query Parameters
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `alert_type` | string | No | Filter by alert category (`OVERDUE`, `APPROACHING_DEADLINE`, `PENDING_REVIEW`) |
+| `severity` | string | No | Filter by priority severity (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`) |
+| `bureau` | string | No | Filter alerts by AICTE Bureau or Cell |
+| `case_id` | string | No | Filter alerts by specific Complaint Case ID |
+| `limit` | integer | No | Maximum alerts to return (Default `100`, Max `500`) |
+
+#### Response (200 OK)
+```json
+{
+  "items": [
+    {
+      "id": "alert-overdue-DEMO-CASE-004",
+      "alert_type": "OVERDUE",
+      "severity": "CRITICAL",
+      "title": "Case DEMO-CASE-004 Overdue",
+      "message": "Case DEMO-CASE-004 (PGRC) for Apex Institute of Technology & Research is 8 days past statutory deadline.",
+      "case_id": "DEMO-CASE-004",
+      "overlap_id": null,
+      "bureau": "PGRC",
+      "institution_id": "DEMO-AICTE-001",
+      "institution_name": "Apex Institute of Technology & Research",
+      "due_date": "2026-10-18T10:00:00",
+      "days_overdue": 8,
+      "hours_remaining": null,
+      "similarity_score": null,
+      "created_at": "2026-09-18T10:00:00",
+      "action_url": "/cases/DEMO-CASE-004"
+    },
+    {
+      "id": "alert-pending-review-OVL-DEMO-CASE-001-DEMO-CASE-002",
+      "alert_type": "PENDING_REVIEW",
+      "severity": "HIGH",
+      "title": "Overlap Awaiting Review: OVL-DEMO-CASE-001-DEMO-CASE-002",
+      "message": "Cross-bureau correlation detected between DEMO-CASE-001 (PGRC) and DEMO-CASE-002 (Approval Bureau) for Apex Institute of Technology & Research (88% match).",
+      "case_id": "DEMO-CASE-001",
+      "overlap_id": "OVL-DEMO-CASE-001-DEMO-CASE-002",
+      "bureau": "PGRC/Approval Bureau",
+      "institution_id": "DEMO-AICTE-001",
+      "institution_name": "Apex Institute of Technology & Research",
+      "due_date": null,
+      "days_overdue": null,
+      "hours_remaining": null,
+      "similarity_score": 0.88,
+      "created_at": "2026-10-26T20:00:00",
+      "action_url": "/overlaps/OVL-DEMO-CASE-001-DEMO-CASE-002"
+    }
+  ],
+  "total": 2,
+  "critical_count": 1,
+  "high_count": 1,
+  "medium_count": 0,
+  "low_count": 0
+}
+```
+
 
 ---
 

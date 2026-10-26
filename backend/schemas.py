@@ -279,8 +279,98 @@ class CaseSummary(BaseModel):
     last_action: Optional[str] = None
     next_action: Optional[str] = None
     last_action_at: Optional[datetime] = None
+    is_overdue: Optional[bool] = None
+    days_overdue: Optional[int] = None
+    is_approaching_deadline: Optional[bool] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+    @model_validator(mode="after")
+    def compute_overdue_flags(self) -> "CaseSummary":
+        from backend.services.deadlines import (
+            is_case_overdue,
+            get_days_overdue,
+            is_case_approaching_deadline
+        )
+        if self.is_overdue is None:
+            self.is_overdue = is_case_overdue(self.due_date, self.status)
+        if self.days_overdue is None:
+            self.days_overdue = get_days_overdue(self.due_date, self.status)
+        if self.is_approaching_deadline is None:
+            self.is_approaching_deadline = is_case_approaching_deadline(self.due_date, self.status)
+        return self
+
+
+# ---------------------------------------------------------
+# Case-to-Case Linking Schemas (Explicit & Auditable)
+# ---------------------------------------------------------
+class CaseLinkItem(BaseModel):
+    link_id: int
+    case_id: str
+    linked_case_id: str
+    overlap_id: str
+    primary_case_id: str
+    secondary_case_id: str
+    decision: str
+    status: str
+    reviewer: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    similarity_score: Optional[float] = None
+    overlap_reason: Optional[str] = None
+    remarks: Optional[str] = None
+    created_at: Optional[datetime] = None
+    linked_case_bureau: Optional[str] = None
+    linked_case_status: Optional[str] = None
+    linked_case_category: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CaseLinksResponse(BaseModel):
+    case_id: str
+    total_links: int
+    links: List[CaseLinkItem]
+    items: List[CaseLinkItem] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def sync_items(self) -> "CaseLinksResponse":
+        if not self.items and self.links:
+            self.items = self.links
+        return self
+
+
+# ---------------------------------------------------------
+# In-App Actionable Alert Schemas
+# ---------------------------------------------------------
+class AlertItem(BaseModel):
+    id: str
+    alert_type: str  # "OVERDUE", "APPROACHING_DEADLINE", "PENDING_REVIEW"
+    severity: str    # "CRITICAL", "HIGH", "MEDIUM", "LOW"
+    title: str
+    message: str
+    case_id: Optional[str] = None
+    overlap_id: Optional[str] = None
+    bureau: Optional[str] = None
+    institution_id: Optional[str] = None
+    institution_name: Optional[str] = None
+    due_date: Optional[datetime] = None
+    days_overdue: Optional[int] = None
+    hours_remaining: Optional[float] = None
+    similarity_score: Optional[float] = None
+    created_at: Optional[datetime] = None
+    action_url: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AlertListResponse(BaseModel):
+    items: List[AlertItem]
+    total: int
+    critical_count: int = 0
+    high_count: int = 0
+    medium_count: int = 0
+    low_count: int = 0
+
 
 
 class CaseListItem(CaseSummary):
