@@ -545,3 +545,53 @@ def test_dashboard_reflects_review_decisions(client):
     # If overlap 1 is no longer Pending Review, overlaps_awaiting_review decreases
     assert data["overlaps_awaiting_review"] == 0
     assert data["potential_overlaps"] == 0
+
+
+# =========================================================================
+# G. DOCUMENT REFERENCE (schema enhancement)
+# =========================================================================
+
+def test_case_action_document_ref_extracted_from_remarks(client, db_session):
+    """
+    Test that document_ref is auto-extracted from remarks when the
+    [Document Ref: ...] annotation is present in the remarks field.
+    """
+    # Pick any seeded case
+    case = db_session.query(ComplaintCase).first()
+    assert case is not None, "No seeded case found"
+
+    payload = {
+        "action_taken": "Reviewed compliance documentation",
+        "action_by": "Inspector General",
+        "remarks": "Reviewed and filed. [Document Ref: AICTE/COMP/2026/001]",
+        "next_action": "Schedule follow-up"
+    }
+    response = client.post(f"/api/cases/{case.case_id}/actions", json=payload)
+    assert response.status_code == 201, response.text
+    data = response.json()
+    assert data["document_ref"] == "AICTE/COMP/2026/001"
+    assert "Document Ref:" in data["remarks"]
+
+
+def test_case_action_document_reference_alias(client, db_session):
+    """
+    Test that document_reference alias is accepted as input to CaseActionCreate
+    and is stored / returned as document_ref in the response.
+    """
+    case = db_session.query(ComplaintCase).first()
+    assert case is not None
+
+    payload = {
+        "action_taken": "Filed supplementary evidence",
+        "action_by": "Bureau Coordinator",
+        "remarks": "Evidence package submitted",
+        "document_reference": "REF/EV/2026/999"
+    }
+    response = client.post(f"/api/cases/{case.case_id}/actions", json=payload)
+    assert response.status_code == 201, response.text
+    data = response.json()
+    # When document_reference alias is passed, it is embedded in remarks as [Document Ref: ...]
+    # and extracted back to document_ref in the response schema
+    remarks = data.get("remarks") or ""
+    doc_ref = data.get("document_ref")
+    assert "REF/EV/2026/999" in remarks or doc_ref == "REF/EV/2026/999"

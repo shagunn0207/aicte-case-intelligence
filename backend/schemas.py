@@ -23,8 +23,40 @@ class CaseActionSchema(BaseModel):
     next_action: Optional[str] = None
     previous_status: Optional[str] = None
     new_status: Optional[str] = None
+    document_ref: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def extract_document_ref(cls, data: Any) -> Any:
+        import re
+        remarks = None
+        if isinstance(data, dict):
+            remarks = data.get("remarks")
+            if remarks and "[Document Ref:" in remarks:
+                m = re.search(r"\[Document Ref:\s*([^\]]+)\]", remarks)
+                if m:
+                    data.setdefault("document_ref", m.group(1).strip())
+        elif hasattr(data, "remarks"):
+            remarks = getattr(data, "remarks", None)
+            if remarks and "[Document Ref:" in remarks:
+                m = re.search(r"\[Document Ref:\s*([^\]]+)\]", remarks)
+                if m:
+                    # Return as dict with document_ref populated
+                    return {
+                        "id": getattr(data, "id"),
+                        "case_id": getattr(data, "case_id"),
+                        "action_taken": getattr(data, "action_taken"),
+                        "action_by": getattr(data, "action_by"),
+                        "action_date": getattr(data, "action_date"),
+                        "remarks": remarks,
+                        "next_action": getattr(data, "next_action", None),
+                        "previous_status": getattr(data, "previous_status", None),
+                        "new_status": getattr(data, "new_status", None),
+                        "document_ref": m.group(1).strip()
+                    }
+        return data
 
 
 class CaseActionCreate(BaseModel):
@@ -34,6 +66,10 @@ class CaseActionCreate(BaseModel):
     next_action: Optional[str] = None
     previous_status: Optional[str] = None
     new_status: Optional[str] = None
+    document_ref: Optional[str] = Field(None, alias="document_reference")
+    document_reference: Optional[str] = None
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class CaseUpdate(BaseModel):
@@ -45,6 +81,10 @@ class CaseUpdate(BaseModel):
     action_by: Optional[str] = None
     action_taken: Optional[str] = None
     remarks: Optional[str] = None
+    document_ref: Optional[str] = Field(None, alias="document_reference")
+    document_reference: Optional[str] = None
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class OverlapItem(BaseModel):

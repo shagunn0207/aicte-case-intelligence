@@ -178,12 +178,29 @@ def record_case_action(
         else case.assigned_officer
     )
 
+    # Resolve document reference: prefer explicit document_ref/document_reference alias,
+    # fall back to inline [Document Ref: ...] annotation already in remarks.
+    explicit_doc_ref = (
+        action_data.document_ref
+        or action_data.document_reference
+    )
+
+    base_remarks = action_data.remarks.strip() if action_data.remarks else None
+
+    if explicit_doc_ref and explicit_doc_ref.strip():
+        ref_annotation = f" [Document Ref: {explicit_doc_ref.strip()}]"
+        if base_remarks:
+            if "[Document Ref:" not in base_remarks:
+                base_remarks = base_remarks + ref_annotation
+        else:
+            base_remarks = ref_annotation.strip()
+
     action_record = CaseAction(
         case_id=case.case_id,
         action_taken=action_data.action_taken.strip(),
         action_by=action_by,
         action_date=utcnow(),
-        remarks=action_data.remarks.strip() if action_data.remarks else None,
+        remarks=base_remarks,
         next_action=case.next_action,
         previous_status=action_data.previous_status or prev_status,
         new_status=new_status
