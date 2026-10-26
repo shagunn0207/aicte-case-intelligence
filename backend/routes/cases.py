@@ -11,8 +11,10 @@ from backend.schemas import (
     CaseSummary,
     CaseDetailResponse,
     CaseActionSchema,
+    CaseUpdate,
     InstitutionSimple
 )
+from backend.services.case_workflow import update_case_workflow
 
 router = APIRouter(prefix="/api/cases", tags=["Complaint Cases"])
 
@@ -149,3 +151,53 @@ def get_case_detail(
         institution=institution_info,
         action_history=[CaseActionSchema.model_validate(a) for a in sorted_actions]
     )
+
+
+@router.patch("/{case_id}", response_model=CaseDetailResponse)
+def update_case(
+    case_id: str,
+    update_data: CaseUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    Apply partial updates to a complaint case (status, assignment, due date, procedural notes).
+    Maintains persistent audit history in CaseAction table in a single transaction.
+    """
+    case = update_case_workflow(db=db, case_id=case_id, update_data=update_data)
+
+    # Reload case with relationships
+    refreshed_case = (
+        db.query(ComplaintCase)
+        .options(
+            joinedload(ComplaintCase.institution),
+            joinedload(ComplaintCase.action_history)
+        )
+        .filter(ComplaintCase.case_id == case.case_id)
+        .first()
+    )
+
+    sorted_actions = sorted(refreshed_case.action_history, key=lambda a: a.action_date, reverse=True)
+
+    institution_info = None
+    if refreshed_case.institution:
+        institution_info = InstitutionSimple.model_validate(refreshed_case.institution)
+
+    return CaseDetailResponse(
+        case_id=refreshed_case.case_id,
+        institution_id=refreshed_case.institution_id,
+        category=refreshed_case.category,
+        description=refreshed_case.description,
+        bureau=refreshed_case.bureau,
+        status=refreshed_case.status,
+        assigned_officer=refreshed_case.assigned_officer,
+        received_date=refreshed_case.received_date,
+        due_date=refreshed_case.due_date,
+        last_action=refreshed_case.last_action,
+        next_action=refreshed_case.next_action,
+        last_action_at=refreshed_case.last_action_at,
+        created_at=refreshed_case.created_at,
+        updated_at=refreshed_case.updated_at,
+        institution=institution_info,
+        action_history=[CaseActionSchema.model_validate(a) for a in sorted_actions]
+    )
+
