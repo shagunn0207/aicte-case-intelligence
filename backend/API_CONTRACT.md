@@ -1,12 +1,12 @@
 # AICTE Case Intelligence — API Contract & Integration Specifications
 
 > **Problem Statement SIH26264**: Integrated Dashboard for Monitoring and Tracking Institution-Related Complaint Cases Across AICTE Bureaus/Cells.  
-> **Backend Integration**: Database, Institution Registry, Complaint Dossiers, Cross-Bureau Overlap Detection, Human Coordination Review, Action History Audit, and Real-Time Dashboard Analytics.  
+> **Backend Integration**: Database, Institution Registry, Complaint Dossiers, Cross-Bureau Overlap Detection, Human Coordination Review, Action History Audit, Real-Time Alerts Feed, Explicit Case-to-Case Linking, and Real-Time Dashboard Analytics.  
 > **Team Alignment**:
 > - **Frontend Developer 1**: Main dashboard, institution registry, Institution 360° profile, and shared application layout.
 > - **Frontend Developer 2**: Overlap intelligence, case comparison, relationship visualization, and coordination review UI.
 > - **Backend Developer 1**: SQLite database foundation, core schemas, baseline APIs, and synthetic demo seeder.
-> - **Backend Developer 2**: Case updates, timeline action history, overlap review persistence, deadline calculations, and router integration.
+> - **Backend Developer 2**: Case updates, timeline action history, overlap review persistence, deadline calculations, actionable alerts feed (`GET /api/alerts`), explicit case link retrieval (`GET /api/cases/{case_id}/links`), and overdue filter on `GET /api/cases`.
 > - **Person 5**: Local Python overlap-detection matching engine (`detect_overlaps(cases)`).
 
 ---
@@ -431,3 +431,173 @@ Computes live statistics directly from SQLite database records and the shared de
 
 ### C. Frontend Compatibility
 - Dual field serialization: models provide both `snake_case` (e.g. `primary_case_id`, `similarity_score`) and `camelCase` (e.g. `caseAId`, `matchScore`) fields to support React/Vite UI components without client-side transformation.
+
+---
+
+## 5. Actionable Alerts Feed
+
+### `GET /api/alerts`
+
+Returns a prioritized, urgency-sorted list of actionable alerts for officer review. Aggregates three alert types from live database state — no polling required.
+
+#### Query Parameters
+
+| Parameter    | Type    | Default | Description |
+|-------------|---------|---------|-------------|
+| `alert_type` | string  | (none)  | Filter: `OVERDUE`, `APPROACHING_DEADLINE`, `PENDING_REVIEW` |
+| `severity`   | string  | (none)  | Filter: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW` |
+| `bureau`     | string  | (none)  | Filter by bureau name (partial match, case-insensitive) |
+| `case_id`    | string  | (none)  | Filter to a specific complaint case ID |
+| `limit`      | integer | 100     | Max alerts returned (1–500) |
+
+#### Alert Types & Severity Logic
+
+| Alert Type             | Trigger Condition                                  | Severity                          |
+|------------------------|---------------------------------------------------|-----------------------------------|
+| `OVERDUE`              | `due_date < now` AND `status != Disposed`          | `CRITICAL` if > 7 days, `HIGH` otherwise |
+| `APPROACHING_DEADLINE` | `now < due_date ≤ now + 48h` AND not Disposed      | `HIGH` if < 24 h remaining, `MEDIUM` otherwise |
+| `PENDING_REVIEW`       | Overlap with `status == Pending Review`            | `HIGH` if similarity ≥ 0.80, `MEDIUM` otherwise |
+
+> Overdue and APPROACHING_DEADLINE are mutually exclusive per case. Disposed cases and cases with no `due_date` are always excluded from deadline alerts. A `Not Related` review decision permanently suppresses the corresponding `PENDING_REVIEW` alert.
+
+#### Stable Alert ID Scheme
+
+| Alert Type             | ID Pattern                                    |
+|------------------------|-----------------------------------------------|
+| `OVERDUE`              | `alert-overdue-{case_id}`                     |
+| `APPROACHING_DEADLINE` | `alert-approaching-{case_id}`                 |
+| `PENDING_REVIEW`       | `alert-pending-review-{overlap_id}`           |
+
+#### Response (200 OK)
+
+```json
+{
+  "items": [
+    {
+      "id": "alert-overdue-COMP-2025-0042",
+      "alert_type": "OVERDUE",
+      "severity": "CRITICAL",
+      "title": "Case COMP-2025-0042 Overdue",
+      "message": "Case COMP-2025-0042 (PGRC) for ABC Institute is 12 days past statutory deadline.",
+      "case_id": "COMP-2025-0042",
+      "overlap_id": null,
+      "bureau": "PGRC",
+      "institution_id": "INST-001",
+      "institution_name": "ABC Institute",
+      "due_date": "2026-10-14T00:00:00",
+      "days_overdue": 12,
+      "hours_remaining": null,
+      "similarity_score": null,
+      "created_at": "2026-09-01T00:00:00",
+      "action_url": "/cases/COMP-2025-0042"
+    },
+    {
+      "id": "alert-pending-review-OVERLAP-abc123",
+      "alert_type": "PENDING_REVIEW",
+      "severity": "HIGH",
+      "title": "Overlap Awaiting Review: OVERLAP-abc123",
+      "message": "Cross-bureau correlation detected between COMP-A (PGRC) and COMP-B (RB) for XYZ College (85% match).",
+      "case_id": "COMP-A",
+      "overlap_id": "OVERLAP-abc123",
+      "bureau": "PGRC/RB",
+      "institution_id": "INST-002",
+      "institution_name": "XYZ College",
+      "due_date": null,
+      "days_overdue": null,
+      "hours_remaining": null,
+      "similarity_score": 0.85,
+      "created_at": "2026-10-26T12:00:00Z",
+      "action_url": "/overlaps/OVERLAP-abc123"
+    }
+  ],
+  "total": 2,
+  "critical_count": 1,
+  "high_count": 1,
+  "medium_count": 0,
+  "low_count": 0
+}
+```
+
+---
+
+## 6. Explicit Case-to-Case Link Retrieval
+
+### `GET /api/cases/{case_id}/links`
+
+Retrieves all **confirmed** coordination relationships for a given complaint case. Only overlaps with an explicit officer review decision are returned; unreviewed algorithmic suggestions are excluded.
+
+#### Path Parameter
+
+| Parameter | Type   | Description                   |
+|-----------|--------|-------------------------------|
+| `case_id` | string | Complaint Case ID (e.g. `COMP-2025-0042`) |
+
+#### Response (200 OK)
+
+```json
+{
+  "case_id": "COMP-2025-0042",
+  "total_links": 1,
+  "links": [
+    {
+      "overlap_id": "OVERLAP-abc123",
+      "linked_case_id": "COMP-2025-0099",
+      "role": "primary",
+      "decision": "Coordination Required",
+      "similarity_score": 0.85,
+      "reasons": ["Same institution", "Similar complaint category"],
+      "reviewed_by": "Officer Singh",
+      "reviewed_at": "2026-10-20T14:30:00",
+      "remarks": "Joint inspection scheduled for Q4."
+    }
+  ]
+}
+```
+
+#### Field Descriptions
+
+| Field            | Description |
+|-----------------|-------------|
+| `overlap_id`     | Stable, canonical identifier for the detected overlap pair. |
+| `linked_case_id` | The partner complaint case in the confirmed relationship. |
+| `role`           | Whether the queried case is `primary` or `secondary` in the pair. |
+| `decision`       | Officer's coordination review determination (see §2.B). |
+| `similarity_score` | Matching engine confidence (0.0 – 1.0). |
+| `reasons`        | List of textual reasons from the matching engine. |
+| `reviewed_by`    | Officer who submitted the coordination review. |
+| `reviewed_at`    | ISO-8601 timestamp of review submission. |
+| `remarks`        | Free-form review notes. |
+
+#### Error Responses
+
+| Status | Condition |
+|--------|-----------|
+| `404 Not Found` | `case_id` does not exist in the database. |
+
+---
+
+## 7. Overdue Filter on Case Listing
+
+### `GET /api/cases?overdue=true`
+
+Extends the standard case list endpoint with an optional boolean filter.
+
+| Parameter | Type    | Description |
+|-----------|---------|-------------|
+| `overdue` | boolean | If `true`, returns only overdue cases. If `false`, returns only non-overdue cases. Omit for all cases. |
+
+Each case summary in the response now includes computed deadline indicators:
+
+```json
+{
+  "case_id": "COMP-2025-0042",
+  "status": "Under Process",
+  "due_date": "2026-10-14T00:00:00",
+  "is_overdue": true,
+  "days_overdue": 12,
+  "is_approaching_deadline": false,
+  "...": "other standard CaseSummary fields"
+}
+```
+
+> `is_overdue`, `days_overdue`, and `is_approaching_deadline` are computed at response time using `backend/services/deadlines.py` and do not require separate queries.
