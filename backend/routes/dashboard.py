@@ -13,6 +13,11 @@ from backend.schemas import (
     CaseActionSchema,
     OverlapItem
 )
+from backend.services.deadlines import (
+    is_case_overdue,
+    is_case_approaching_deadline,
+    get_current_utc_time
+)
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 
@@ -57,25 +62,30 @@ def get_dashboard_stats(
         if st not in ALL_STATUSES:
             status_distribution.append(StatusDistribution(status=st, count=count))
 
-    # Overdue cases calculation:
-    # Rule: due_date < current_time AND status != 'Disposed'
-    overdue_stmt = (
-        select(func.count(ComplaintCase.case_id))
-        .where(
-            ComplaintCase.due_date < now,
-            ComplaintCase.status != "Disposed"
-        )
-    )
-    overdue_cases = db.scalar(overdue_stmt) or 0
+    now = get_current_utc_time()
 
-    # Potential overlaps count from CoordinationReview table
-    potential_overlaps = (
+    # Active (non-disposed) cases for deadline service calculations
+    active_cases = (
+        db.query(ComplaintCase)
+        .filter(ComplaintCase.status != "Disposed")
+        .all()
+    )
+    overdue_cases = sum(
+        1 for c in active_cases if is_case_overdue(c.due_date, c.status, current_time=now)
+    )
+    cases_approaching_deadline = sum(
+        1 for c in active_cases if is_case_approaching_deadline(c.due_date, c.status, window_hours=48, current_time=now)
+    )
+
+    # Overlaps awaiting review
+    overlaps_awaiting_review = (
         db.scalar(
             select(func.count(CoordinationReview.id))
             .where(CoordinationReview.status == "Pending Review")
         )
         or 0
     )
+    potential_overlaps = overlaps_awaiting_review
 
     # Bureau-wise workload
     bureau_workload_raw = (
@@ -140,6 +150,8 @@ def get_dashboard_stats(
         escalated_cases=escalated_cases,
         overdue_cases=overdue_cases,
         potential_overlaps=potential_overlaps,
+        overlaps_awaiting_review=overlaps_awaiting_review,
+        cases_approaching_deadline=cases_approaching_deadline,
         bureau_wise_workload=bureau_wise_workload,
         status_distribution=status_distribution,
         region_wise_cases=region_wise_cases,

@@ -6,7 +6,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.database import init_db
 from backend.routes.institutions import router as institutions_router
 from backend.routes.cases import router as cases_router
+from backend.routes.actions import router as actions_router
+from backend.routes.overlaps import router as overlaps_router
 from backend.routes.dashboard import router as dashboard_router
+from backend.routes.alerts import router as alerts_router
 from backend.schemas import HealthResponse
 
 
@@ -58,7 +61,10 @@ def health_check():
 # Include feature routers
 app.include_router(institutions_router)
 app.include_router(cases_router)
+app.include_router(actions_router)
+app.include_router(overlaps_router)
 app.include_router(dashboard_router)
+app.include_router(alerts_router)
 
 
 @app.get("/", tags=["System"])
