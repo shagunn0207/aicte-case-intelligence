@@ -1,12 +1,13 @@
 # AICTE Case Intelligence — API Contract & Integration Specifications
 
 > **Problem Statement SIH26264**: Integrated Dashboard for Monitoring and Tracking Institution-Related Complaint Cases Across AICTE Bureaus/Cells.  
-> **Backend Developer 1**: Database, Institution APIs, Case Retrieval APIs, Dashboard Statistics, and API Contract.  
+> **Backend Integration**: Database, Institution Registry, Complaint Dossiers, Cross-Bureau Overlap Detection, Human Coordination Review, Action History Audit, and Real-Time Dashboard Analytics.  
 > **Team Alignment**:
 > - **Frontend Developer 1**: Main dashboard, institution registry, Institution 360° profile, and shared application layout.
 > - **Frontend Developer 2**: Overlap intelligence, case comparison, relationship visualization, and coordination review UI.
-> - **Backend Developer 2**: Case updates, action history, and coordination workflows.
-> - **Person 5**: Python overlap-detection engine (`detect_overlaps(cases)`).
+> - **Backend Developer 1**: SQLite database foundation, core schemas, baseline APIs, and synthetic demo seeder.
+> - **Backend Developer 2**: Case updates, timeline action history, overlap review persistence, deadline calculations, and router integration.
+> - **Person 5**: Local Python overlap-detection matching engine (`detect_overlaps(cases)`).
 
 ---
 
@@ -14,8 +15,8 @@
 
 - **Base URL**: `http://localhost:8000/api`
 - **Interactive Documentation**: `http://localhost:8000/docs` (Swagger UI) & `http://localhost:8000/redoc`
-- **Naming Convention**: `snake_case` strictly applied across all request and response fields.
-- **Date/Time Formats**: ISO-8601 strings (e.g., `2026-10-20T11:30:00Z` or `2026-10-20T11:30:00`). All stored datetimes represent UTC.
+- **Naming Convention**: `snake_case` applied across backend models. For overlap payloads, both `snake_case` and `camelCase` fields are provided simultaneously to guarantee seamless frontend React/Vite compatibility.
+- **Date/Time Formats**: ISO-8601 strings (e.g., `2026-10-20T11:30:00Z` or `2026-10-20T11:30:00`). Stored datetimes represent naive UTC.
 - **Data Disclaimer**: All demo data, institution names, officer assignments, and complaint narratives are strictly synthetic and fictional.
 
 ---
@@ -29,15 +30,19 @@
 4. `Transferred` — Remitted to an external state council, university board, or affiliated agency.
 5. `Escalated` — Elevated to the AICTE Standing Appellate Committee or senior leadership.
 
-### B. Core Bureaus & Cells (Examples)
-- `PGRC` — Public Grievance Redressal Cell
-- `RB` — Regulation Bureau
-- `Approval Bureau` — Approval Bureau (AB)
-- `Policy and Academic Planning Bureau` — PAPB
+### B. Coordination Review Determinations
+1. `Coordination Required` — Linked cross-bureau issues detected; joint inquiry, inspection, or synchronized hearings required.
+2. `Continue Independently` — Independent proceedings warranted; no joint regulatory intervention required.
+3. `Not Related` — Algorithmic false positive or coincidental keyword match; complaint proceedings remain strictly separate. Suppresses recurring alerts under "Pending Review".
+4. `Further Review Required` — Evidence ambiguous or incomplete; escalated for higher supervisory or regional review.
 
 ### C. Overdue Case Definition
 A complaint is defined as **Overdue** if and only if:
 $$\text{due\_date} < \text{current\_time} \quad \text{AND} \quad \text{status} \neq \text{'Disposed'}$$
+
+### D. Approaching Deadline Definition
+A case is classified as **Approaching Deadline** if:
+$$\text{current\_time} \le \text{due\_date} \le \text{current\_time} + 48\,\text{hours} \quad \text{AND} \quad \text{status} \neq \text{'Disposed'}$$
 
 ---
 
@@ -80,12 +85,6 @@ GET /api/institutions
       "name": "Apex Institute of Technology & Research",
       "region": "Uttar Pradesh",
       "case_count": 4
-    },
-    {
-      "institution_id": "DEMO-AICTE-002",
-      "name": "Sahyadri College of Engineering & Management",
-      "region": "Karnataka",
-      "case_count": 1
     }
   ],
   "page": 1,
@@ -102,10 +101,7 @@ GET /api/institutions
 GET /api/institutions/{institution_id}
 ```
 
-Returns holistic institution credentials alongside all historical and active complaints across all Bureaus and Cells.
-
-#### Path Parameters
-- `institution_id` (string, required): The synthetic AICTE Permanent ID (e.g., `DEMO-AICTE-001`).
+Returns comprehensive institution profile credentials alongside all associated active and historical complaints.
 
 #### Response (200 OK)
 ```json
@@ -122,44 +118,23 @@ Returns holistic institution credentials alongside all historical and active com
       "case_id": "DEMO-CASE-001",
       "institution_id": "DEMO-AICTE-001",
       "category": "Fee Irregularities",
-      "description": "Student grievance submitted regarding mandatory collection of unauthorized 'development and capitation fees' amounting to Rs. 65,000 in cash prior to hall ticket issuance for 3rd year B.Tech examinations.",
+      "description": "Student grievance submitted regarding mandatory collection of unauthorized capitation fees...",
       "bureau": "PGRC",
       "status": "Under Process",
       "assigned_officer": "Dr. R. K. Sharma (Director, PGRC)",
       "received_date": "2026-10-04T10:00:00",
       "due_date": "2026-11-03T10:00:00",
-      "last_action": "Explanation sought from Principal with 7-day compliance window",
-      "next_action": "Evaluate institution response and verify bank transaction ledgers",
+      "last_action": "Explanation sought from Principal",
+      "next_action": "Evaluate institution response",
       "last_action_at": "2026-10-21T10:00:00"
-    },
-    {
-      "case_id": "DEMO-CASE-002",
-      "institution_id": "DEMO-AICTE-001",
-      "category": "Faculty Grievance",
-      "description": "Faculty association complaint alleging unauthorized deductions and 4-month salary withholding under the pretext of institutional financial crunch.",
-      "bureau": "RB",
-      "status": "Under Process",
-      "assigned_officer": "Shri Arvind Verma (Regional Officer, Regulation Bureau)",
-      "received_date": "2026-10-08T10:00:00",
-      "due_date": "2026-11-07T10:00:00",
-      "last_action": "Joint scrutiny notice issued to management board",
-      "next_action": "Conduct virtual inquiry hearing with faculty representatives",
-      "last_action_at": "2026-10-23T10:00:00"
     }
   ]
 }
 ```
 
-#### Error Response (404 Not Found)
-```json
-{
-  "detail": "Institution with ID 'NON_EXISTENT' was not found."
-}
-```
-
 ---
 
-### 3.4 Complaint Cases List, Multi-Filter & Search
+### 3.4 Complaint Cases List & Multi-Filter
 
 ```http
 GET /api/cases
@@ -171,58 +146,22 @@ GET /api/cases
 | `institution_id` | string | No | Filter by exact AICTE Institution ID |
 | `bureau` | string | No | Filter by Bureau or Cell (`PGRC`, `RB`, `Approval Bureau`) |
 | `status` | string | No | Filter by case status (`Pending`, `Under Process`, `Disposed`, `Transferred`, `Escalated`) |
-| `region` | string | No | Filter cases by institution's region/state (e.g., `Karnataka`, `Uttar Pradesh`) |
-| `category` | string | No | Case-insensitive partial filter by category (`Fee Irregularities`, `Faculty Grievance`) |
-| `from_date` | datetime | No | ISO-8601 string; cases received on or after this timestamp |
-| `to_date` | datetime | No | ISO-8601 string; cases received on or before this timestamp |
+| `region` | string | No | Filter cases by institution region/state |
+| `category` | string | No | Case-insensitive partial filter by category |
+| `from_date` | datetime | No | Cases received on or after timestamp |
+| `to_date` | datetime | No | Cases received on or before timestamp |
 | `page` | integer | No | 1-based page index (Default `1`) |
 | `page_size` | integer | No | Items per page (Default `20`, Max `100`) |
 
-#### Sorting
-Deterministically sorted by `received_date` descending (newest complaints first) with `case_id` descending as a stable tie-breaker.
-
-#### Response (200 OK)
-```json
-{
-  "items": [
-    {
-      "case_id": "DEMO-CASE-001",
-      "institution_id": "DEMO-AICTE-001",
-      "category": "Fee Irregularities",
-      "description": "Student grievance submitted regarding mandatory collection of unauthorized development fees...",
-      "bureau": "PGRC",
-      "status": "Under Process",
-      "assigned_officer": "Dr. R. K. Sharma (Director, PGRC)",
-      "received_date": "2026-10-04T10:00:00",
-      "due_date": "2026-11-03T10:00:00",
-      "last_action": "Explanation sought from Principal with 7-day compliance window",
-      "next_action": "Evaluate institution response and verify bank transaction ledgers",
-      "last_action_at": "2026-10-21T10:00:00"
-    }
-  ],
-  "page": 1,
-  "page_size": 20,
-  "total": 9
-}
-```
-
-#### Error Response (422 Unprocessable Content)
-Triggered when `from_date > to_date` or pagination exceeds valid bounds (`page < 1` or `page_size > 100`).
-```json
-{
-  "detail": "Invalid date range: 'from_date' cannot be later than 'to_date'."
-}
-```
-
 ---
 
-### 3.5 Case Details & Action History Audit
+### 3.5 Case Details & Timeline Action History
 
 ```http
 GET /api/cases/{case_id}
 ```
 
-Returns the full complaint dossier, nested institution information, and the chronological action-history audit trail.
+Returns full dossier, nested institution details, and deterministically sorted chronological audit timeline.
 
 #### Response (200 OK)
 ```json
@@ -252,45 +191,195 @@ Returns the full complaint dossier, nested institution information, and the chro
     {
       "id": 2,
       "case_id": "DEMO-CASE-001",
-      "action_taken": "Interim response received from college management pleading clerical error",
+      "action_taken": "Interim response received from college management",
       "action_by": "Dr. R. K. Sharma (PGRC)",
       "action_date": "2026-10-21T10:00:00",
-      "remarks": "Institution claimed cash was towards outsourced software test preparation. Unacceptable under norms.",
+      "remarks": "Institution claimed cash was towards outsourced software test preparation.",
       "next_action": "Evaluate institution response and verify bank transaction ledgers",
       "previous_status": "Under Process",
-      "new_status": "Under Process"
-    },
-    {
-      "id": 1,
-      "case_id": "DEMO-CASE-001",
-      "action_taken": "Official notice sent to institution requesting explanation for cash collections",
-      "action_by": "Dr. R. K. Sharma (PGRC)",
-      "action_date": "2026-10-11T10:00:00",
-      "remarks": "Notice served via official speed post and email to Chairman and Principal",
-      "next_action": "Await written response within 7 working days",
-      "previous_status": "Pending",
       "new_status": "Under Process"
     }
   ]
 }
 ```
 
-#### Error Response (404 Not Found)
+---
+
+### 3.6 Case Workflow & Partial Updates
+
+```http
+PATCH /api/cases/{case_id}
+```
+
+Performs partial workflow updates (status transitions, reassignment, statutory due date revisions). Atomically commits changes and appends an audit record to `CaseAction` in the same transaction.
+
+#### Request Body
 ```json
 {
-  "detail": "Complaint case with ID 'NON_EXISTENT' was not found."
+  "status": "Under Process",
+  "assigned_officer": "Dr. Sunita Rao (Deputy Director)",
+  "due_date": "2026-11-20T10:00:00",
+  "next_action": "Schedule inquiry hearing",
+  "remarks": "Reassigned following regional redistribution"
+}
+```
+
+#### Response (200 OK)
+Returns complete refreshed `CaseDetailResponse` including updated action history.
+
+#### Error Responses
+- `404 Not Found`: Case ID does not exist.
+- `422 Unprocessable Content`: Invalid status (must be one of: `Pending`, `Under Process`, `Disposed`, `Transferred`, `Escalated`).
+
+---
+
+### 3.7 Log Case Procedural Action
+
+```http
+POST /api/cases/{case_id}/actions
+```
+
+Appends an event to the case's chronological procedural timeline and updates the case's `last_action`, `next_action`, and status.
+
+#### Request Body
+```json
+{
+  "action_taken": "Show-cause notice served to Governing Body",
+  "action_by": "Dr. S. K. Narayanan (PGRC)",
+  "remarks": "Notice served via official speed post with 10-day compliance window",
+  "next_action": "Await written response",
+  "new_status": "Under Process"
+}
+```
+
+#### Response (201 Created)
+```json
+{
+  "id": 5,
+  "case_id": "DEMO-CASE-001",
+  "action_taken": "Show-cause notice served to Governing Body",
+  "action_by": "Dr. S. K. Narayanan (PGRC)",
+  "action_date": "2026-10-26T18:40:00",
+  "remarks": "Notice served via official speed post with 10-day compliance window",
+  "next_action": "Await written response",
+  "previous_status": "Under Process",
+  "new_status": "Under Process"
 }
 ```
 
 ---
 
-### 3.6 Cross-Bureau Dashboard Aggregate Statistics
+### 3.8 List & Filter Candidate Overlaps
+
+```http
+GET /api/overlaps
+```
+
+Reconciles candidate cross-bureau overlaps identified by Person 5's matching engine with persisted human review decisions in `CoordinationReview`.
+
+#### Query Parameters
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `search` | string | No | Search across institution name, ID, case IDs, summaries, and key signals |
+| `bureau` | string | No | Filter by bureau involved (`PGRC`, `RB`, `AB`) |
+| `status` | string | No | Filter by review status (`Pending Review`, `Coordination Required`, `Not Related`, `Further Review Required`) |
+| `min_score` | float | No | Minimum score threshold (e.g. `80` or `0.80`) |
+| `sort_by` | string | No | Sort order (`score_desc`, `score_asc`, `date_desc`, `date_asc`, `institution`) |
+
+#### Response (200 OK)
+```json
+{
+  "items": [
+    {
+      "id": "OVL-DEMO-CASE-001-DEMO-CASE-002",
+      "overlap_id": "OVL-DEMO-CASE-001-DEMO-CASE-002",
+      "review_id": 1,
+      "institutionId": "DEMO-AICTE-001",
+      "institutionName": "Apex Institute of Technology & Research",
+      "institutionRegion": "Uttar Pradesh",
+      "caseAId": "DEMO-CASE-001",
+      "caseBId": "DEMO-CASE-002",
+      "caseABureau": "PGRC",
+      "caseBBureau": "RB",
+      "caseAStatus": "Under Process",
+      "caseBStatus": "Under Process",
+      "matchScore": 89,
+      "similarity_score": 0.89,
+      "status": "Pending Review",
+      "summary": "Cross-bureau correlation (89%) detected between PGRC and RB regarding concurrent financial grievances.",
+      "keySignals": [
+        "Identical Institution Permanent ID (DEMO-AICTE-001)",
+        "Cross-Bureau Concurrent Proceedings (PGRC vs RB)",
+        "Correlated Allegation Keywords: cash, salary, fees"
+      ],
+      "matchReasons": [
+        {
+          "id": "sig-inst-DEMO-CASE-001-DEMO-CASE-002",
+          "signalName": "Permanent Institution ID Match",
+          "category": "Entity Identity",
+          "score": 100.0,
+          "description": "Both complaint proceedings are registered against institution ID 'DEMO-AICTE-001'."
+        }
+      ]
+    }
+  ],
+  "total": 1,
+  "pending_count": 1,
+  "coordinated_count": 0
+}
+```
+
+---
+
+### 3.9 Single Overlap Dossier
+
+```http
+GET /api/overlaps/{overlap_id}
+```
+
+Accepts either canonical string ID (e.g., `OVL-DEMO-CASE-001-DEMO-CASE-002`) or integer review ID (e.g., `1`). Returns complete overlap evidence dossier and review history.
+
+---
+
+### 3.10 Submit Coordination Review Determination
+
+```http
+POST /api/overlaps/{overlap_id}/review
+```
+
+Records a statutory human review determination for a detected overlap pair. Updates the overlap state, records reviewer identity and justification remarks, and appends audit timeline actions to both referenced cases.
+
+#### Request Body
+```json
+{
+  "decision": "Coordination Required",
+  "remarks": "Concurrent financial complaints warrant joint inquiry committee by combined PGRC and RB officers.",
+  "reviewerName": "Dr. Ananya Roy (Joint Director)",
+  "reviewerDesignation": "Senior Evaluation Committee",
+  "reviewerEmail": "ananya.roy@aicte-india.org"
+}
+```
+
+#### Allowed Decision Values
+- `Coordination Required`
+- `Continue Independently`
+- `Not Related`
+- `Further Review Required`
+
+#### Safety & Human Control Guarantees
+- Complaint cases are **never** automatically merged, deleted, or closed.
+- A determination of `Not Related` marks the pair as resolved/independent and suppresses unreviewed alerts under `Pending Review`.
+- Repeat reviews update the active determination while preserving a complete audit trail.
+
+---
+
+### 3.11 Cross-Bureau Dashboard Aggregate Statistics
 
 ```http
 GET /api/dashboard
 ```
 
-Computes live aggregate metrics directly from SQLite database records.
+Computes live statistics directly from SQLite database records and the shared deadline service.
 
 #### Response (200 OK)
 ```json
@@ -303,113 +392,42 @@ Computes live aggregate metrics directly from SQLite database records.
   "escalated_cases": 1,
   "overdue_cases": 1,
   "potential_overlaps": 1,
+  "overlaps_awaiting_review": 1,
+  "cases_approaching_deadline": 0,
   "bureau_wise_workload": [
-    {
-      "bureau": "PGRC",
-      "case_count": 4
-    },
-    {
-      "bureau": "RB",
-      "case_count": 3
-    },
-    {
-      "bureau": "Approval Bureau",
-      "case_count": 2
-    }
+    { "bureau": "PGRC", "case_count": 4 },
+    { "bureau": "RB", "case_count": 3 },
+    { "bureau": "Approval Bureau", "case_count": 2 }
   ],
   "status_distribution": [
-    {
-      "status": "Pending",
-      "count": 2
-    },
-    {
-      "status": "Under Process",
-      "count": 3
-    },
-    {
-      "status": "Disposed",
-      "count": 2
-    },
-    {
-      "status": "Transferred",
-      "count": 1
-    },
-    {
-      "status": "Escalated",
-      "count": 1
-    }
+    { "status": "Pending", "count": 2 },
+    { "status": "Under Process", "count": 3 },
+    { "status": "Disposed", "count": 2 },
+    { "status": "Transferred", "count": 1 },
+    { "status": "Escalated", "count": 1 }
   ],
   "region_wise_cases": [
-    {
-      "region": "Uttar Pradesh",
-      "case_count": 4
-    },
-    {
-      "region": "Karnataka",
-      "case_count": 1
-    },
-    {
-      "region": "Maharashtra",
-      "case_count": 1
-    },
-    {
-      "region": "Tamil Nadu",
-      "case_count": 1
-    },
-    {
-      "region": "Telangana",
-      "case_count": 1
-    },
-    {
-      "region": "West Bengal",
-      "case_count": 1
-    }
+    { "region": "Uttar Pradesh", "case_count": 4 },
+    { "region": "Karnataka", "case_count": 1 }
   ],
-  "recent_actions": [
-    {
-      "id": 4,
-      "case_id": "DEMO-CASE-005",
-      "action_taken": "Summons issued to Chairman following repeated hearing absences",
-      "action_by": "Dr. Manjunath Swamy (AB)",
-      "action_date": "2026-10-18T10:00:00",
-      "remarks": "Matter escalated to Standing Appellate Committee due to unauthorized student enrollment",
-      "next_action": "Emergency briefing scheduled before AICTE Standing Appellate Committee",
-      "previous_status": "Under Process",
-      "new_status": "Escalated"
-    }
-  ],
-  "recent_overlaps": [
-    {
-      "review_id": 1,
-      "primary_case_id": "DEMO-CASE-001",
-      "secondary_case_id": "DEMO-CASE-002",
-      "similarity_score": 0.89,
-      "overlap_reason": "Coincident financial irregularities at DEMO-AICTE-001: Concurrent complaints across PGRC and RB indicate systematic cash collection while withholding faculty salaries.",
-      "status": "Pending Review",
-      "detected_at": "2026-10-24T10:00:00"
-    }
-  ]
+  "recent_actions": [],
+  "recent_overlaps": []
 }
 ```
 
 ---
 
-## 4. Teammate Integration Specs
+## 4. Teammate Integration Specifications
 
-### A. Backend Developer 2 Integration (Action History & Updates)
-- Model: `CaseAction` in `backend/models.py`.
-- Relationship: `ComplaintCase.action_history` (`back_populates="case"`).
-- When a case status or action is appended, Backend Developer 2 can insert into `case_actions` and update `complaint_cases.last_action`, `complaint_cases.last_action_at`, `complaint_cases.next_action`, and `complaint_cases.status`.
+### A. Person 5 Matching Engine
+- **Module**: `backend/matching.py`
+- **Signature**: `detect_overlaps(cases: list[dict]) -> list[dict]`
+- **Stable ID Derivation**: `derive_stable_overlap_id(case_a_id: str, case_b_id: str) -> str`
+- Deterministic canonical pair ordering guarantees stable identities across runs.
 
-### B. Person 5 Integration (Overlap Detection Engine)
-- Target signature: `detect_overlaps(cases: list[dict]) -> list[dict]`
-- Model: `CoordinationReview` in `backend/models.py`.
-- Dashboard metric `potential_overlaps` automatically queries `CoordinationReview.status == "Pending Review"`.
-- Person 5 outputs feed into `coordination_reviews` with fields `primary_case_id`, `secondary_case_id`, `similarity_score`, `overlap_reason`.
+### B. Deadline Calculations
+- **Module**: `backend/services/deadlines.py`
+- Centralized calculation for `is_case_overdue` and `is_case_approaching_deadline` with timezone-safe UTC normalization.
 
-### C. Frontend Developers 1 & 2 Integration (React / Vite)
-- CORS is enabled by default for:
-  - `http://localhost:5173`
-  - `http://127.0.0.1:5173`
-  - `http://localhost:3000`
-- Configurable via `CORS_ORIGINS` environment variable.
+### C. Frontend Compatibility
+- Dual field serialization: models provide both `snake_case` (e.g. `primary_case_id`, `similarity_score`) and `camelCase` (e.g. `caseAId`, `matchScore`) fields to support React/Vite UI components without client-side transformation.
