@@ -5,14 +5,25 @@ import OverlapIntelligence from './pages/OverlapIntelligence';
 import CaseDetails from './pages/CaseDetails';
 import CoordinationReview from './pages/CoordinationReview';
 import NotFound from './pages/NotFound';
+import Dashboard from './pages/Dashboard';
+import Institutions from './pages/Institutions';
+import InstitutionProfile from './pages/InstitutionProfile';
+import AllCases from './pages/AllCases';
 
 export default function App() {
   return (
     <ModuleLayout>
       <Routes>
-        {/* Default route redirects to Overlap Intelligence */}
-        <Route path="/" element={<Navigate to="/overlaps" replace />} />
+        {/* Default route redirects to Dashboard */}
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
+        {/* New Person 1 routes */}
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/institutions" element={<Institutions />} />
+        <Route path="/institutions/:institutionId" element={<InstitutionProfile />} />
+        <Route path="/cases" element={<AllCases />} />
+
+        {/* Existing Person 2 routes */}
         {/* Master Overlap Intelligence Page */}
         <Route path="/overlaps" element={<OverlapIntelligence />} />
 

@@ -6,15 +6,20 @@ import {
   GitCompare,
   Building2,
   Menu,
-  X
+  X,
+  Home,
+  FileStack
 } from 'lucide-react';
 
 export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navLinks = [
+    { to: '/dashboard', label: 'Dashboard', icon: Home },
+    { to: '/institutions', label: 'Institutions', icon: FileStack },
+    { to: '/cases', label: 'All Cases', icon: Layers },
     { to: '/overlaps', label: 'Overlap Dashboard', icon: Layers },
-    { to: '/compare/OVL-2026-0814', label: 'Compare & Review', icon: GitCompare }
+    { to: '/compare/OVL-2026-0814', label: 'Compare & Review', icon: GitCompare },
   ];
 
   return (
