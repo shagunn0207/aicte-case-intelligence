@@ -12,13 +12,16 @@ import {
   Sparkles,
   ShieldCheck
 } from 'lucide-react';
-import { getOverlapById, getCaseById, getCaseComparison, submitCoordinationReview } from '../services/overlapApi';
+import { getOverlapById, getCaseComparison, submitCoordinationReview } from '../services/overlapApi';
 import PageHeader from '../components/common/PageHeader';
 import { BureauBadge, StatusBadge, PriorityBadge } from '../components/common/StatusBadge';
 import MatchReasons from '../components/overlaps/MatchReasons';
 import LoadingState from '../components/common/LoadingState';
 import ErrorState from '../components/common/ErrorState';
 import { REVIEW_DECISION_OPTIONS, formatDate, formatDateTime } from '../utils/formatters';
+import { getCaseById, updateCase, postCaseAction, getCaseLinks } from '../services/caseApi';
+import RecordActionModal from '../components/common/RecordActionModal';
+import ActionTimeline from '../components/overlaps/ActionTimeline';
 
 export default function CaseDetails({ mode = 'compare' }) {
   const { overlapId, caseId } = useParams();
@@ -42,6 +45,40 @@ export default function CaseDetails({ mode = 'compare' }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccessMsg, setSubmitSuccessMsg] = useState(null);
   const [submitError, setSubmitError] = useState(null);
+  const [editStatus, setEditStatus] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  // Sync editStatus with loaded case
+  useEffect(() => {
+    if (singleCase) {
+      setEditStatus(singleCase.status);
+    }
+  }, [singleCase]);
+
+  const handleStatusSave = async () => {
+    if (!singleCase) return;
+    setIsUpdating(true);
+    try {
+      await updateCase(singleCase.caseId, { status: editStatus });
+      const refreshed = await getCaseById(singleCase.caseId);
+      setSingleCase(refreshed);
+    } catch (err) {
+      alert('Failed to update case status');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleAddAction = async (action) => {
+    if (!singleCase) return;
+    try {
+      await postCaseAction(singleCase.caseId, action);
+      const refreshed = await getCaseById(singleCase.caseId);
+      setSingleCase(refreshed);
+    } catch (err) {
+      alert('Failed to record action');
+    }
+  };
 
   useEffect(() => {
     async function loadData() {
