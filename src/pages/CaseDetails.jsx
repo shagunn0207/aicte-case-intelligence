@@ -16,6 +16,7 @@ import { getOverlapById, getCaseComparison, submitCoordinationReview } from '../
 import PageHeader from '../components/common/PageHeader';
 import { BureauBadge, StatusBadge, PriorityBadge } from '../components/common/StatusBadge';
 import MatchReasons from '../components/overlaps/MatchReasons';
+import RelationshipGraph from '../components/overlaps/RelationshipGraph';
 import LoadingState from '../components/common/LoadingState';
 import ErrorState from '../components/common/ErrorState';
 import { REVIEW_DECISION_OPTIONS, formatDate, formatDateTime } from '../utils/formatters';
@@ -389,12 +390,22 @@ export default function CaseDetails({ mode = 'compare' }) {
         </div>
       </div>
 
-      {/* 2. SUPPLIED MATCHING EVIDENCE */}
+      {/* 2. INTERACTIVE RELATIONSHIP GRAPH TOPOLOGY */}
+      <div>
+        <RelationshipGraph
+          institution={{ name: instName, id: instId, region: overlapData?.institutionRegion }}
+          caseA={caseA}
+          caseB={caseB}
+          overlap={overlapData}
+        />
+      </div>
+
+      {/* 3. SUPPLIED MATCHING EVIDENCE */}
       <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-xs">
         <MatchReasons matchReasons={overlapData?.matchReasons} />
       </div>
 
-      {/* 3. HUMAN REVIEW FORM */}
+      {/* 4. HUMAN REVIEW FORM */}
       <div id="review-section" className="bg-white border border-slate-200 rounded-lg p-5 sm:p-6 shadow-xs space-y-5">
         <div>
           <div className="flex items-center justify-between">

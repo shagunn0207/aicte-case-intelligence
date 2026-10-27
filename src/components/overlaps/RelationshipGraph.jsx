@@ -24,14 +24,22 @@ export default function RelationshipGraph({
   const [selectedNode, setSelectedNode] = useState('overlap');
   const [filterMode, setFilterMode] = useState('all'); // 'all', 'overlap-only', 'bureau-only'
 
-  const instName = institution?.name || overlap?.institutionName || "Example Institute of Technology";
-  const instId = institution?.id || overlap?.institutionId || "AICTE-PID-100245";
+  const instName = institution?.name || overlap?.institutionName || overlap?.institution_name || "AICTE Approved Institution";
+  const instId = institution?.id || institution?.institution_id || overlap?.institutionId || overlap?.institution_id || "PID-AICTE";
 
-  const caseAId = caseA?.caseId || overlap?.caseAId || "PGRC-2026-1042";
-  const caseABureau = caseA?.bureauCode || overlap?.caseABureau || "PGRC";
-  const caseBId = caseB?.caseId || overlap?.caseBId || "RB-2026-0281";
-  const caseBBureau = caseB?.bureauCode || overlap?.caseBBureau || "RB";
-  const score = overlap?.matchScore || 91;
+  const caseAId = caseA?.caseId || caseA?.case_id || overlap?.caseAId || overlap?.case_a_id || "CASE-A";
+  const caseABureau = caseA?.bureauCode || caseA?.bureau || overlap?.caseABureau || overlap?.case_a_bureau || "PGRC";
+  const caseBId = caseB?.caseId || caseB?.case_id || overlap?.caseBId || overlap?.case_b_id || "CASE-B";
+  const caseBBureau = caseB?.bureauCode || caseB?.bureau || overlap?.caseBBureau || overlap?.case_b_bureau || "RB";
+  const score = overlap?.matchScore ?? overlap?.match_score ?? (overlap?.similarity_score ? Math.round(overlap.similarity_score * 100) : 85);
+
+  const isConfirmed = overlap?.status === 'Coordination Required';
+  const signals = overlap?.keySignals || overlap?.key_signals || [];
+  const signal1Title = signals[0] || "Identical Permanent Institution Record";
+  const signal2Title = signals[1] || signals[2] || "Cross-Bureau Procedural Alignment";
+
+  const incidentScope = overlap?.incidentRelationship || overlap?.incident_relationship || (isConfirmed ? "Confirmed Coordinated Action" : "Under Review");
+  const conceptName = overlap?.issueSimilarity?.shared_concepts?.[0] || overlap?.issue_similarity?.shared_concepts?.[0] || signals[0] || "Regulatory Correlation";
 
   // Node metadata for the interactive sidebar
   const nodeDetails = {
@@ -42,8 +50,8 @@ export default function RelationshipGraph({
       description: "Central AICTE affiliated entity under review. Both case files target programs and infrastructure hosted at this institution.",
       attributes: [
         { label: "AICTE Permanent ID", value: instId },
-        { label: "Campus Region", value: "Northern Region (NWRO)" },
-        { label: "Approved Intake", value: "720 Seats" }
+        { label: "Campus Region", value: institution?.region || overlap?.institutionRegion || overlap?.institution_region || "AICTE Regional Jurisdiction" },
+        { label: "Entity Status", value: "Registered AICTE Institution" }
       ]
     },
     bureauA: {
@@ -52,7 +60,7 @@ export default function RelationshipGraph({
       id: caseABureau,
       description: "Statutory cell adjudicating grievance petitions lodged by faculty, students, or institutional staff.",
       attributes: [
-        { label: "Bureau Mandate", value: "Public Grievance Redressal (CPGRAMS / AICTE)" },
+        { label: "Bureau Mandate", value: BUREAU_DEFINITIONS[caseABureau]?.name || "Statutory Cell" },
         { label: "Active File", value: caseAId }
       ]
     },
@@ -62,7 +70,7 @@ export default function RelationshipGraph({
       id: caseBBureau,
       description: "Bureau overseeing compliance with AICTE Approval Process Handbook (APH) norms and physical inspections.",
       attributes: [
-        { label: "Bureau Mandate", value: "Statutory Regulation & Cadre Compliance" },
+        { label: "Bureau Mandate", value: BUREAU_DEFINITIONS[caseBBureau]?.name || "Regulatory Bureau" },
         { label: "Active File", value: caseBId }
       ]
     },
@@ -70,52 +78,56 @@ export default function RelationshipGraph({
       type: "Case Proceeding 1",
       title: caseAId,
       id: caseAId,
-      description: caseA?.title || "Irregular Faculty Appointments and Withholding of 7th CPC Scales in Mechanical & CSE",
+      description: caseA?.title || caseA?.category || caseA?.description || "Complaint File A",
       attributes: [
         { label: "Bureau Desk", value: caseABureau },
-        { label: "Current Status", value: caseA?.status || "Under Review" },
-        { label: "Filing Date", value: caseA?.filingDate || "12 Jan 2026" }
+        { label: "Current Status", value: caseA?.status || overlap?.caseAStatus || overlap?.case_a_status || "Under Process" },
+        { label: "Filing Date", value: caseA?.filingDate || caseA?.received_date ? String(caseA?.filingDate || caseA?.received_date).split('T')[0] : "Active File" }
       ]
     },
     caseB: {
       type: "Case Proceeding 2",
       title: caseBId,
       id: caseBId,
-      description: caseB?.title || "Deficit in Qualified Faculty Cadre & Unapproved Shift in Mechanical Engineering",
+      description: caseB?.title || caseB?.category || caseB?.description || "Complaint File B",
       attributes: [
         { label: "Bureau Desk", value: caseBBureau },
-        { label: "Current Status", value: caseB?.status || "In Progress" },
-        { label: "Filing Date", value: caseB?.filingDate || "28 Jan 2026" }
+        { label: "Current Status", value: caseB?.status || overlap?.caseBStatus || overlap?.case_b_status || "Under Process" },
+        { label: "Filing Date", value: caseB?.filingDate || caseB?.received_date ? String(caseB?.filingDate || caseB?.received_date).split('T')[0] : "Active File" }
       ]
     },
     overlap: {
-      type: "Cross-Bureau Overlap Correlation",
-      title: `Algorithmic Overlap: ${caseAId} ↔ ${caseBId}`,
-      id: overlap?.id || "OVL-2026-0814",
-      description: `Cross-bureau correlation score of ${score}%. Strong token collision across faculty rosters and Mechanical Engg cadre deficits.`,
+      type: isConfirmed ? "Officially Confirmed Coordination Link" : "Algorithmically Detected Candidate Overlap",
+      title: `Overlap Nexus: ${caseAId} ↔ ${caseBId}`,
+      id: overlap?.id || overlap?.overlap_id || "OVL-LINK",
+      description: overlap?.summary || overlap?.overlap_reason || overlap?.overlapReason || `Cross-bureau correlation score of ${score}%. Shared findings warrant joint review.`,
       attributes: [
-        { label: "Confidence Score", value: `${score}% Match` },
-        { label: "Detected Date", value: overlap?.detectedDate || "10 Feb 2026" },
-        { label: "Recommended Action", value: "Joint Coordination Review" }
+        { label: "Matching Score", value: `${score}% (Heuristic Score, Not Probability)` },
+        { label: "Review Status", value: overlap?.status || "Pending Review" },
+        { label: "Incident Scope", value: incidentScope },
+        { label: "Regulatory Issue", value: conceptName },
+        { label: "Detected Date", value: overlap?.detectedDate || overlap?.detected_date || "Active Detection" },
+        { label: "Recommendation", value: overlap?.reviewRecommendation || overlap?.review_recommendation || "Joint Coordination Review" }
       ]
     },
     sharedEntity1: {
-      type: "Overlapping Subject Entity",
-      title: "Mechanical Engg Cadre & Faculty Roll",
-      id: "ENT-CADRE-01",
-      description: "Both proceedings allege serious discrepancies in the verified faculty roster for B.Tech Mechanical Engineering for Academic Year 2025-26.",
+      type: "Primary Correlated Signal",
+      title: signal1Title,
+      id: "SIG-01",
+      description: `Primary evidence signal identified by the AICTE correlation engine: ${signal1Title}.`,
       attributes: [
-        { label: "Matched Persons", value: "9 Faculty Names in common" },
-        { label: "Violation Scope", value: "Faculty-to-Student Ratio & 7th CPC Scales" }
+        { label: "Signal Category", value: "Topical Evidence" },
+        { label: "Relevance", value: "High Confidence" }
       ]
     },
     sharedEntity2: {
-      type: "Overlapping Physical Asset",
-      title: "Plot 14-B Knowledge Park III Campus",
-      id: "ENT-LOC-01",
-      description: "Physical facilities, laboratories, and attendance logs inspected correspond to the identical campus cadastral footprint.",
+      type: "Secondary Correlated Signal",
+      title: signal2Title,
+      id: "SIG-02",
+      description: `Corroborating signal identified across bureau files: ${signal2Title}.`,
       attributes: [
-        { label: "Campus Address", value: "Plot 14-B, Sector 62, Institutional Area, Noida" }
+        { label: "Signal Category", value: "Procedural Nexus" },
+        { label: "Relevance", value: "Supporting Factor" }
       ]
     }
   };
@@ -338,17 +350,23 @@ export default function RelationshipGraph({
                 className={`w-full p-3.5 rounded-lg border text-center transition-all ${
                   selectedNode === 'overlap'
                     ? 'ring-2 ring-rose-500 bg-rose-50 border-rose-400 shadow-sm'
+                    : isConfirmed
+                    ? 'bg-emerald-50/70 border-emerald-300 hover:bg-emerald-50'
                     : 'bg-amber-50/70 border-amber-300 hover:bg-amber-50'
                 }`}
               >
                 <div className="flex items-center justify-center gap-2">
-                  <GitMerge className="w-4 h-4 text-rose-600" />
-                  <span className="text-xs font-bold text-rose-900 uppercase tracking-wide">
-                    Cross-Bureau Overlap Correlation ({score}% Match Confidence)
+                  <GitMerge className={`w-4 h-4 ${isConfirmed ? 'text-emerald-700' : 'text-rose-600'}`} />
+                  <span className={`text-xs font-bold uppercase tracking-wide ${isConfirmed ? 'text-emerald-900' : 'text-rose-900'}`}>
+                    {isConfirmed
+                      ? "Officially Confirmed Coordination Link"
+                      : `Algorithmically Detected Candidate Nexus (${score}% Heuristic Match Score)`}
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-600 mt-1 max-w-lg mx-auto">
-                  Algorithmic linkage across {caseABureau} & {caseBBureau} proceedings. Shared findings warrant joint review.
+                  {isConfirmed
+                    ? `Statutorily confirmed joint proceeding across ${caseABureau} & ${caseBBureau}.`
+                    : `Multi-signal linkage across ${caseABureau} & ${caseBBureau} pending officer determination. Heuristic matching score is not a probability.`}
                 </p>
               </button>
             </div>
@@ -366,10 +384,10 @@ export default function RelationshipGraph({
               >
                 <div className="text-[10px] font-bold text-amber-800 uppercase flex items-center gap-1">
                   <Layers className="w-3 h-3 text-amber-600" />
-                  Shared Subject Roster
+                  Primary Correlated Signal
                 </div>
-                <div className="text-xs font-semibold text-slate-800 mt-0.5">
-                  Mechanical Cadre (9 Faculty Names)
+                <div className="text-xs font-semibold text-slate-800 mt-0.5 truncate" title={signal1Title}>
+                  {signal1Title}
                 </div>
               </button>
 
@@ -384,10 +402,10 @@ export default function RelationshipGraph({
               >
                 <div className="text-[10px] font-bold text-amber-800 uppercase flex items-center gap-1">
                   <Building2 className="w-3 h-3 text-amber-600" />
-                  Shared Physical Campus
+                  Secondary Correlated Signal
                 </div>
-                <div className="text-xs font-semibold text-slate-800 mt-0.5">
-                  Plot 14-B Knowledge Park III
+                <div className="text-xs font-semibold text-slate-800 mt-0.5 truncate" title={signal2Title}>
+                  {signal2Title}
                 </div>
               </button>
             </div>
