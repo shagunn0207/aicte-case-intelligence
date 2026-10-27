@@ -52,6 +52,9 @@ def _build_cases_dicts(cases: List[ComplaintCase]) -> List[Dict[str, Any]]:
             "assigned_officer": c.assigned_officer,
             "received_date": c.received_date.isoformat() if c.received_date else None,
             "due_date": c.due_date.isoformat() if c.due_date else None,
+            "last_action": c.last_action,
+            "next_action": c.next_action,
+            "last_action_at": c.last_action_at.isoformat() if c.last_action_at else None,
         })
     return result
 

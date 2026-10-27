@@ -156,6 +156,16 @@ class OverlapDetailResponse(BaseModel):
     reviewed_at: Optional[datetime] = None
     review_history: List[dict] = Field(default_factory=list)
     reviewHistory: List[dict] = Field(default_factory=list)
+    counter_evidence: List[str] = Field(default_factory=list)
+    counterEvidence: List[str] = Field(default_factory=list)
+    issue_similarity: Optional[dict] = None
+    issueSimilarity: Optional[dict] = None
+    incident_relationship: Optional[str] = None
+    incidentRelationship: Optional[str] = None
+    review_recommendation: Optional[str] = None
+    reviewRecommendation: Optional[str] = None
+    taxonomy_version: Optional[str] = None
+    taxonomyVersion: Optional[str] = None
 
     model_config = ConfigDict(populate_by_name=True, from_attributes=True)
 
@@ -221,6 +231,23 @@ class OverlapDetailResponse(BaseModel):
             data["detectedDate"] = det_date
             data["last_updated"] = last_up
             data["lastUpdated"] = last_up
+
+            ce = data.get("counter_evidence") or data.get("counterEvidence") or []
+            iss_sim = data.get("issue_similarity") or data.get("issueSimilarity")
+            inc_rel = data.get("incident_relationship") or data.get("incidentRelationship")
+            rev_rec = data.get("review_recommendation") or data.get("reviewRecommendation")
+            tax_v = data.get("taxonomy_version") or data.get("taxonomyVersion")
+
+            data["counter_evidence"] = ce
+            data["counterEvidence"] = ce
+            data["issue_similarity"] = iss_sim
+            data["issueSimilarity"] = iss_sim
+            data["incident_relationship"] = inc_rel
+            data["incidentRelationship"] = inc_rel
+            data["review_recommendation"] = rev_rec
+            data["reviewRecommendation"] = rev_rec
+            data["taxonomy_version"] = tax_v
+            data["taxonomyVersion"] = tax_v
         return data
 
 
