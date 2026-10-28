@@ -1,4 +1,5 @@
 from typing import Optional
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select, or_, exists
 from sqlalchemy.orm import Session
@@ -62,19 +63,58 @@ def list_institutions(
         stmt = stmt.where(filter_clause)
         count_stmt = count_stmt.where(filter_clause)
 
-    # Filter by status if provided — 'pending' means institutions with at least one
-    # active (non-disposed) complaint case
-    if status_filter and status_filter.strip().lower() == "pending":
-        pending_inst_subq = (
-            select(ComplaintCase.institution_id)
-            .where(ComplaintCase.status.in_(list(PENDING_STATUSES)))
-            .distinct()
-            .subquery()
-        )
-        stmt = stmt.where(Institution.institution_id.in_(select(pending_inst_subq)))
-        count_stmt = count_stmt.where(
-            Institution.institution_id.in_(select(pending_inst_subq))
-        )
+    # Filter by status if provided
+    # 'pending' means institutions with at least one active (non-disposed) case
+    # Other values (under_process, disposed, transferred, escalated, overdue) filter
+    # institutions that have at least one case matching that exact status.
+    if status_filter and status_filter.strip():
+        sf_lower = status_filter.strip().lower()
+        if sf_lower == "pending":
+            pending_inst_subq = (
+                select(ComplaintCase.institution_id)
+                .where(ComplaintCase.status.in_(list(PENDING_STATUSES)))
+                .distinct()
+                .subquery()
+            )
+            stmt = stmt.where(Institution.institution_id.in_(select(pending_inst_subq)))
+            count_stmt = count_stmt.where(
+                Institution.institution_id.in_(select(pending_inst_subq))
+            )
+        elif sf_lower == "overdue":
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            overdue_inst_subq = (
+                select(ComplaintCase.institution_id)
+                .where(
+                    ComplaintCase.status != "Disposed",
+                    ComplaintCase.due_date.isnot(None),
+                    ComplaintCase.due_date < now
+                )
+                .distinct()
+                .subquery()
+            )
+            stmt = stmt.where(Institution.institution_id.in_(select(overdue_inst_subq)))
+            count_stmt = count_stmt.where(
+                Institution.institution_id.in_(select(overdue_inst_subq))
+            )
+        else:
+            # Map URL-friendly slug back to the exact DB status string
+            STATUS_SLUG_MAP = {
+                "under_process": "Under Process",
+                "disposed": "Disposed",
+                "transferred": "Transferred",
+                "escalated": "Escalated",
+            }
+            db_status = STATUS_SLUG_MAP.get(sf_lower, status_filter.strip())
+            specific_inst_subq = (
+                select(ComplaintCase.institution_id)
+                .where(ComplaintCase.status == db_status)
+                .distinct()
+                .subquery()
+            )
+            stmt = stmt.where(Institution.institution_id.in_(select(specific_inst_subq)))
+            count_stmt = count_stmt.where(
+                Institution.institution_id.in_(select(specific_inst_subq))
+            )
 
     total = db.scalar(count_stmt) or 0
 

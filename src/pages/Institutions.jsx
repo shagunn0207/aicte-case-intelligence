@@ -6,6 +6,53 @@ import ErrorState from '../components/common/ErrorState';
 import EmptyState from '../components/common/EmptyState';
 import { Search, X } from 'lucide-react';
 
+// Maps URL status slug -> human-readable label and badge styling
+const STATUS_META = {
+  pending: {
+    label: 'Active / Pending',
+    icon: '⏳',
+    badgeClass: 'bg-amber-100 text-amber-800 border-amber-300',
+    emptyTitle: 'No institutions with active (pending) cases',
+    emptyDesc:
+      'There are currently no institutions with active (Pending, Under Process, Escalated or Transferred) complaint cases.',
+  },
+  under_process: {
+    label: 'Under Process',
+    icon: '⚙️',
+    badgeClass: 'bg-blue-100 text-blue-800 border-blue-300',
+    emptyTitle: 'No institutions with Under Process cases',
+    emptyDesc: 'There are currently no institutions that have cases under process.',
+  },
+  disposed: {
+    label: 'Disposed',
+    icon: '✅',
+    badgeClass: 'bg-green-100 text-green-800 border-green-300',
+    emptyTitle: 'No institutions with Disposed cases',
+    emptyDesc: 'There are currently no institutions with disposed cases.',
+  },
+  transferred: {
+    label: 'Transferred',
+    icon: '🔁',
+    badgeClass: 'bg-purple-100 text-purple-800 border-purple-300',
+    emptyTitle: 'No institutions with Transferred cases',
+    emptyDesc: 'There are currently no institutions with transferred cases.',
+  },
+  escalated: {
+    label: 'Escalated',
+    icon: '🚨',
+    badgeClass: 'bg-red-100 text-red-800 border-red-300',
+    emptyTitle: 'No institutions with Escalated cases',
+    emptyDesc: 'There are currently no institutions with escalated cases.',
+  },
+  overdue: {
+    label: 'Overdue',
+    icon: '⏰',
+    badgeClass: 'bg-orange-100 text-orange-800 border-orange-300',
+    emptyTitle: 'No institutions with overdue cases',
+    emptyDesc: 'There are currently no institutions with overdue cases.',
+  },
+};
+
 export default function Institutions() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -16,7 +63,6 @@ export default function Institutions() {
   const q = searchParams.get('q') || '';
   const page = Number(searchParams.get('page') || 1);
   const pageSize = Number(searchParams.get('page_size') || 10);
-  // 'pending' filter applied when status=pending is in the URL
   const statusFilter = searchParams.get('status') || '';
 
   useEffect(() => {
@@ -50,7 +96,7 @@ export default function Institutions() {
     setSearchParams(params);
   };
 
-  const clearPendingFilter = () => {
+  const clearStatusFilter = () => {
     const params = {};
     if (q) params.q = q;
     params.page = 1;
@@ -70,20 +116,22 @@ export default function Institutions() {
   const { items = [], total = 0 } = data || {};
   const totalPages = Math.ceil(total / pageSize);
 
-  const isPendingFilter = statusFilter.toLowerCase() === 'pending';
+  const activeMeta = STATUS_META[statusFilter?.toLowerCase()] || null;
 
   // Empty state: differentiate between "no institutions at all" and "none match the filter"
   if (!data || items.length === 0) {
     return (
       <div className="p-8 space-y-6">
         <h1 className="text-2xl font-bold mb-4">Institutions</h1>
-        {isPendingFilter && (
+        {activeMeta && (
           <div className="flex items-center gap-2 mb-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-300">
-              ⏳ Pending Filter Active
+            <span
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${activeMeta.badgeClass}`}
+            >
+              {activeMeta.icon} {activeMeta.label} Filter Active
             </span>
             <button
-              onClick={clearPendingFilter}
+              onClick={clearStatusFilter}
               className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 underline"
             >
               <X className="w-3 h-3" /> Clear filter
@@ -91,12 +139,8 @@ export default function Institutions() {
           </div>
         )}
         <EmptyState
-          title={isPendingFilter ? 'No institutions with pending cases' : 'No institutions found'}
-          description={
-            isPendingFilter
-              ? 'There are currently no institutions with active (Pending, Under Process, Escalated or Transferred) complaint cases.'
-              : 'Try adjusting the search criteria.'
-          }
+          title={activeMeta ? activeMeta.emptyTitle : 'No institutions found'}
+          description={activeMeta ? activeMeta.emptyDesc : 'Try adjusting the search criteria.'}
         />
       </div>
     );
@@ -106,14 +150,16 @@ export default function Institutions() {
     <div className="p-8 space-y-6">
       <h1 className="text-2xl font-bold mb-4">Institutions</h1>
 
-      {/* Active pending filter badge */}
-      {isPendingFilter && (
+      {/* Active filter badge */}
+      {activeMeta && (
         <div className="flex items-center gap-2 -mt-2 mb-2">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-300">
-            ⏳ Showing institutions with pending cases
+          <span
+            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${activeMeta.badgeClass}`}
+          >
+            {activeMeta.icon} Showing institutions with {activeMeta.label} cases
           </span>
           <button
-            onClick={clearPendingFilter}
+            onClick={clearStatusFilter}
             className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 underline"
           >
             <X className="w-3 h-3" /> Clear filter
@@ -155,7 +201,7 @@ export default function Institutions() {
                 <td className="px-4 py-2 text-center">—</td>
                 <td className="px-4 py-2">
                   <button
-                    onClick={() => navigate(`/institutions/${encodeURIComponent(inst.institution_id)}`)}
+                    onClick={() => navigate(`/institutions/${encodeURIComponent(inst.institution_id)}/relationship-map`)}
                     className="px-3 py-1 bg-aicte-navy text-white rounded text-sm"
                   >
                     View

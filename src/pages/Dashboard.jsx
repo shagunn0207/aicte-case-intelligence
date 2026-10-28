@@ -40,24 +40,53 @@ export default function Dashboard() {
 
   const stats = [
     {
-      title: 'Total Cases',
-      value: data?.total_cases ?? 0,
-      icon: '📊',
-      onClick: () => navigate('/institutions'),
-    },
-    {
-      title: 'Pending',
-      value: data?.pending_cases ?? 0,
-      icon: '⏳',
+      title: 'Institutions with Active Issues',
+      value: data?.institutions_with_active_issues ?? 0,
+      icon: '🏫',
       onClick: () => navigate('/institutions?status=pending'),
     },
-    { title: 'Under Process', value: data?.under_process_cases ?? 0, icon: '⚙️' },
-    { title: 'Disposed', value: data?.disposed_cases ?? 0, icon: '✅' },
-    { title: 'Transferred', value: data?.transferred_cases ?? 0, icon: '🔁' },
-    { title: 'Escalated', value: data?.escalated_cases ?? 0, icon: '🚨' },
-    { title: 'Overdue', value: data?.overdue_cases ?? 0, icon: '⏰' },
-    { title: 'Potential Overlaps', value: data?.potential_overlaps ?? 0, icon: '🔗' },
-    { title: 'Approaching Deadline', value: data?.cases_approaching_deadline ?? 0, icon: '⌛' },
+    {
+      title: 'All Cases',
+      value: data?.total_cases ?? 0,
+      icon: '📋',
+      onClick: () => navigate('/cases'),
+    },
+    {
+      title: 'Under Process',
+      value: data?.under_process_cases ?? 0,
+      icon: '⚙️',
+      onClick: () => navigate('/institutions?status=under_process'),
+    },
+    {
+      title: 'Disposed',
+      value: data?.disposed_cases ?? 0,
+      icon: '✅',
+      onClick: () => navigate('/institutions?status=disposed'),
+    },
+    {
+      title: 'Transferred',
+      value: data?.transferred_cases ?? 0,
+      icon: '🔁',
+      onClick: () => navigate('/institutions?status=transferred'),
+    },
+    {
+      title: 'Escalated',
+      value: data?.escalated_cases ?? 0,
+      icon: '🚨',
+      onClick: () => navigate('/institutions?status=escalated'),
+    },
+    {
+      title: 'Overdue',
+      value: data?.overdue_cases ?? 0,
+      icon: '⏰',
+      onClick: () => navigate('/institutions?status=overdue'),
+    },
+    {
+      title: 'Potential Overlaps',
+      value: data?.potential_overlaps ?? 0,
+      icon: '🔗',
+      onClick: () => navigate('/overlaps'),
+    },
   ];
 
   const bureauWorkload = (data?.bureau_wise_workload ?? []).map((item) => ({

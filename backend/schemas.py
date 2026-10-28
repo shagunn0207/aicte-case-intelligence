@@ -459,6 +459,7 @@ class RegionWiseCases(BaseModel):
 
 class DashboardStatsResponse(BaseModel):
     total_cases: int
+    institutions_with_active_issues: int = 0
     pending_cases: int
     under_process_cases: int
     disposed_cases: int
