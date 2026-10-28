@@ -1,6 +1,7 @@
 from typing import Optional
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select, or_
+from sqlalchemy import func, select, or_, exists
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
@@ -14,10 +15,14 @@ from backend.schemas import (
 
 router = APIRouter(prefix="/api/institutions", tags=["Institutions"])
 
+# Statuses that are considered "pending" (active / not resolved)
+PENDING_STATUSES = {"Pending", "Under Process", "Escalated", "Transferred"}
+
 
 @router.get("", response_model=InstitutionListResponse)
 def list_institutions(
     q: Optional[str] = Query(None, description="Case-insensitive partial search against institution names and IDs"),
+    status_filter: Optional[str] = Query(None, alias="status", description="Filter institutions by case status. Use 'pending' to show only institutions with at least one active (non-disposed) case."),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page (max 100)"),
     db: Session = Depends(get_db)
@@ -25,6 +30,8 @@ def list_institutions(
     """
     Search and list institutions with pagination and complaint case counts.
     Supports case-insensitive partial search across institution names and IDs.
+    Supports optional status filter: 'pending' returns only institutions with at least one
+    active (Pending, Under Process, Escalated, or Transferred) complaint case.
     """
     # Subquery for counting cases per institution
     case_count_subq = (
@@ -55,6 +62,59 @@ def list_institutions(
         )
         stmt = stmt.where(filter_clause)
         count_stmt = count_stmt.where(filter_clause)
+
+    # Filter by status if provided
+    # 'pending' means institutions with at least one active (non-disposed) case
+    # Other values (under_process, disposed, transferred, escalated, overdue) filter
+    # institutions that have at least one case matching that exact status.
+    if status_filter and status_filter.strip():
+        sf_lower = status_filter.strip().lower()
+        if sf_lower == "pending":
+            pending_inst_subq = (
+                select(ComplaintCase.institution_id)
+                .where(ComplaintCase.status.in_(list(PENDING_STATUSES)))
+                .distinct()
+                .subquery()
+            )
+            stmt = stmt.where(Institution.institution_id.in_(select(pending_inst_subq)))
+            count_stmt = count_stmt.where(
+                Institution.institution_id.in_(select(pending_inst_subq))
+            )
+        elif sf_lower == "overdue":
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            overdue_inst_subq = (
+                select(ComplaintCase.institution_id)
+                .where(
+                    ComplaintCase.status != "Disposed",
+                    ComplaintCase.due_date.isnot(None),
+                    ComplaintCase.due_date < now
+                )
+                .distinct()
+                .subquery()
+            )
+            stmt = stmt.where(Institution.institution_id.in_(select(overdue_inst_subq)))
+            count_stmt = count_stmt.where(
+                Institution.institution_id.in_(select(overdue_inst_subq))
+            )
+        else:
+            # Map URL-friendly slug back to the exact DB status string
+            STATUS_SLUG_MAP = {
+                "under_process": "Under Process",
+                "disposed": "Disposed",
+                "transferred": "Transferred",
+                "escalated": "Escalated",
+            }
+            db_status = STATUS_SLUG_MAP.get(sf_lower, status_filter.strip())
+            specific_inst_subq = (
+                select(ComplaintCase.institution_id)
+                .where(ComplaintCase.status == db_status)
+                .distinct()
+                .subquery()
+            )
+            stmt = stmt.where(Institution.institution_id.in_(select(specific_inst_subq)))
+            count_stmt = count_stmt.where(
+                Institution.institution_id.in_(select(specific_inst_subq))
+            )
 
     total = db.scalar(count_stmt) or 0
 

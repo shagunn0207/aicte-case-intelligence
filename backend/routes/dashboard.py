@@ -87,6 +87,16 @@ def get_dashboard_stats(
     )
     potential_overlaps = overlaps_awaiting_review
 
+    # Institutions with active issues (at least one non-disposed case)
+    ACTIVE_STATUSES = ["Pending", "Under Process", "Escalated", "Transferred"]
+    institutions_with_active_issues = (
+        db.scalar(
+            select(func.count(func.distinct(ComplaintCase.institution_id)))
+            .where(ComplaintCase.status.in_(ACTIVE_STATUSES))
+        )
+        or 0
+    )
+
     # Bureau-wise workload
     bureau_workload_raw = (
         db.query(ComplaintCase.bureau, func.count(ComplaintCase.case_id).label("cnt"))
@@ -143,6 +153,7 @@ def get_dashboard_stats(
 
     return DashboardStatsResponse(
         total_cases=total_cases,
+        institutions_with_active_issues=institutions_with_active_issues,
         pending_cases=pending_cases,
         under_process_cases=under_process_cases,
         disposed_cases=disposed_cases,
