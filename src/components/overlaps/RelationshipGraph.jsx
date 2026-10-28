@@ -12,7 +12,9 @@ import {
   ExternalLink,
   ChevronRight,
   ShieldAlert,
-  FileText
+  FileText,
+  AlertTriangle,
+  CheckCircle2
 } from 'lucide-react';
 import { BureauBadge, StatusBadge } from '../common/StatusBadge';
 import { BUREAU_DEFINITIONS, formatDate } from '../../utils/formatters';
@@ -28,28 +30,110 @@ export default function RelationshipGraph({
   const [selectedNode, setSelectedNode] = useState('overlap');
   const [zoomLevel, setZoomLevel] = useState(1);
 
-  // Extract institution data safely from passed props
-  const instId = institution?.institution_id || institution?.id || overlap?.institution_id || overlap?.institutionId || '—';
-  const instName = institution?.name || overlap?.institution_name || overlap?.institutionName || 'AICTE Approved Institution';
-  const instRegion = institution?.region || institution?.state || overlap?.institution_region || overlap?.institutionRegion || '—';
+  // 1. Safe extraction of institution fields (supporting snake_case & camelCase)
+  const instId =
+    institution?.institution_id ||
+    institution?.id ||
+    overlap?.institution_id ||
+    overlap?.institutionId ||
+    '—';
+  const instName =
+    institution?.name ||
+    overlap?.institution_name ||
+    overlap?.institutionName ||
+    'AICTE Approved Institution';
+  const instRegion =
+    institution?.region ||
+    institution?.state ||
+    overlap?.institution_region ||
+    overlap?.institutionRegion ||
+    '—';
 
-  // Extract case A & case B data safely from passed props
-  const caseAId = caseA?.case_id || caseA?.caseId || overlap?.case_a_id || overlap?.caseAId || overlap?.primary_case_id;
-  const caseABureau = caseA?.bureau || caseA?.bureauCode || overlap?.case_a_bureau || overlap?.caseABureau || 'UNK';
-  const caseAStatus = caseA?.status || overlap?.case_a_status || overlap?.caseAStatus || 'Pending';
-  const caseATitle = caseA?.category || caseA?.title || caseA?.description || 'Complaint Proceeding A';
+  // 2. Safe extraction of Case A & Case B fields (supporting snake_case & camelCase)
+  const caseAId =
+    caseA?.case_id ||
+    caseA?.caseId ||
+    overlap?.case_a_id ||
+    overlap?.caseAId ||
+    overlap?.primary_case_id;
+  const caseABureau =
+    caseA?.bureau ||
+    caseA?.bureauCode ||
+    overlap?.case_a_bureau ||
+    overlap?.caseABureau ||
+    'UNK';
+  const caseAStatus =
+    caseA?.status ||
+    overlap?.case_a_status ||
+    overlap?.caseAStatus ||
+    'Pending';
+  const caseATitle =
+    caseA?.category ||
+    caseA?.title ||
+    caseA?.description ||
+    'Complaint Proceeding A';
+  const caseAFilingDate =
+    caseA?.received_date ||
+    caseA?.filingDate ||
+    caseA?.filing_date;
 
-  const caseBId = caseB?.case_id || caseB?.caseId || overlap?.case_b_id || overlap?.caseBId || overlap?.secondary_case_id;
-  const caseBBureau = caseB?.bureau || caseB?.bureauCode || overlap?.case_b_bureau || overlap?.caseBBureau || 'UNK';
-  const caseBStatus = caseB?.status || overlap?.case_b_status || overlap?.caseBStatus || 'Pending';
-  const caseBTitle = caseB?.category || caseB?.title || caseB?.description || 'Complaint Proceeding B';
+  const caseBId =
+    caseB?.case_id ||
+    caseB?.caseId ||
+    overlap?.case_b_id ||
+    overlap?.caseBId ||
+    overlap?.secondary_case_id;
+  const caseBBureau =
+    caseB?.bureau ||
+    caseB?.bureauCode ||
+    overlap?.case_b_bureau ||
+    overlap?.caseBBureau ||
+    'UNK';
+  const caseBStatus =
+    caseB?.status ||
+    overlap?.case_b_status ||
+    overlap?.caseBStatus ||
+    'Pending';
+  const caseBTitle =
+    caseB?.category ||
+    caseB?.title ||
+    caseB?.description ||
+    'Complaint Proceeding B';
+  const caseBFilingDate =
+    caseB?.received_date ||
+    caseB?.filingDate ||
+    caseB?.filing_date;
 
-  const overlapId = overlap?.id || overlap?.overlap_id || overlap?.overlapId;
-  const score = overlap?.match_score ?? overlap?.matchScore ?? (overlap?.similarity_score ? Math.round(overlap.similarity_score * 100) : null);
-  const overlapStatus = overlap?.status || 'Pending Review';
-  const summary = overlap?.summary || overlap?.overlap_reason;
+  // 3. Overlap identifiers, scores, and status
+  const overlapId =
+    overlap?.id ||
+    overlap?.overlap_id ||
+    overlap?.overlapId;
+
+  // Handle both match_score (e.g. 89) and similarity_score (e.g. 0.89) without incorrect double multiplication
+  let score = null;
+  if (overlap?.match_score !== undefined && overlap?.match_score !== null) {
+    score = typeof overlap.match_score === 'number' ? Math.round(overlap.match_score) : Number(overlap.match_score);
+  } else if (overlap?.matchScore !== undefined && overlap?.matchScore !== null) {
+    score = typeof overlap.matchScore === 'number' ? Math.round(overlap.matchScore) : Number(overlap.matchScore);
+  } else if (overlap?.similarity_score !== undefined && overlap?.similarity_score !== null) {
+    const rawSim = Number(overlap.similarity_score);
+    score = rawSim <= 1 ? Math.round(rawSim * 100) : Math.round(rawSim);
+  } else if (overlap?.similarityScore !== undefined && overlap?.similarityScore !== null) {
+    const rawSim = Number(overlap.similarityScore);
+    score = rawSim <= 1 ? Math.round(rawSim * 100) : Math.round(rawSim);
+  }
+
+  // Review status: Actual review status from backend (never inferred from match score)
+  const rawStatus = overlap?.status || overlap?.reviewer_decision || overlap?.reviewerDecision || 'Pending Review';
+  const isConfirmed = rawStatus.toLowerCase().includes('coordination') || rawStatus.toLowerCase().includes('confirmed');
+
+  const summary = overlap?.summary || overlap?.overlap_reason || overlap?.overlapReason;
   const keySignals = overlap?.key_signals || overlap?.keySignals || [];
   const matchReasons = overlap?.match_reasons || overlap?.matchReasons || [];
+
+  // Extract incident / shared taxonomy concepts if present
+  const sharedEntities = overlap?.shared_entities || overlap?.sharedEntities || [];
 
   // Handle missing data gracefully
   if (!caseAId && !caseBId && !overlapId) {
@@ -70,11 +154,11 @@ export default function RelationshipGraph({
       id: instId,
       description: `Central AICTE affiliated technical entity. Concurrent proceedings across bureaus target this institution.`,
       actionLabel: 'View Full Institution Profile',
-      actionPath: instId !== '—' ? `/institutions/${encodeURIComponent(instId)}` : null,
+      actionPath: instId && instId !== '—' ? `/institutions/${encodeURIComponent(instId)}` : null,
       attributes: [
         { label: 'AICTE Permanent ID', value: instId },
         { label: 'Region / State', value: instRegion },
-        { label: 'Institution Status', value: institution?.status || institution?.institution_type || 'Active' }
+        { label: 'Institution Status', value: institution?.status || institution?.institution_type || institution?.institutionType || 'Active' }
       ]
     },
     bureauA: {
@@ -86,7 +170,7 @@ export default function RelationshipGraph({
       actionPath: null,
       attributes: [
         { label: 'Bureau Code', value: caseABureau },
-        { label: 'Mandate', value: BUREAU_DEFINITIONS[caseABureau]?.shortName || caseABureau },
+        { label: 'Bureau Mandate', value: BUREAU_DEFINITIONS[caseABureau]?.shortName || caseABureau },
         { label: 'Assigned Proceeding', value: caseAId }
       ]
     },
@@ -99,7 +183,7 @@ export default function RelationshipGraph({
       actionPath: null,
       attributes: [
         { label: 'Bureau Code', value: caseBBureau },
-        { label: 'Mandate', value: BUREAU_DEFINITIONS[caseBBureau]?.shortName || caseBBureau },
+        { label: 'Bureau Mandate', value: BUREAU_DEFINITIONS[caseBBureau]?.shortName || caseBBureau },
         { label: 'Assigned Proceeding', value: caseBId }
       ]
     },
@@ -109,12 +193,12 @@ export default function RelationshipGraph({
       id: caseAId,
       description: caseATitle,
       actionLabel: 'Open Single Case Dossier',
-      actionPath: `/cases/${encodeURIComponent(caseAId)}`,
+      actionPath: caseAId ? `/cases/${encodeURIComponent(caseAId)}` : null,
       attributes: [
         { label: 'Case Identifier', value: caseAId },
         { label: 'Managing Bureau', value: caseABureau },
         { label: 'Current Status', value: caseAStatus },
-        { label: 'Received Date', value: caseA?.received_date || caseA?.filingDate ? formatDate(caseA.received_date || caseA.filingDate) : '—' }
+        { label: 'Filing / Received Date', value: caseAFilingDate ? formatDate(caseAFilingDate) : '—' }
       ]
     },
     caseB: {
@@ -123,29 +207,48 @@ export default function RelationshipGraph({
       id: caseBId,
       description: caseBTitle,
       actionLabel: 'Open Single Case Dossier',
-      actionPath: `/cases/${encodeURIComponent(caseBId)}`,
+      actionPath: caseBId ? `/cases/${encodeURIComponent(caseBId)}` : null,
       attributes: [
         { label: 'Case Identifier', value: caseBId },
         { label: 'Managing Bureau', value: caseBBureau },
         { label: 'Current Status', value: caseBStatus },
-        { label: 'Received Date', value: caseB?.received_date || caseB?.filingDate ? formatDate(caseB.received_date || caseB.filingDate) : '—' }
+        { label: 'Filing / Received Date', value: caseBFilingDate ? formatDate(caseBFilingDate) : '—' }
       ]
     },
     overlap: {
-      type: 'Cross-Bureau Overlap Correlation',
-      title: `Nexus: ${caseAId} ↔ ${caseBId}`,
+      type: isConfirmed ? 'Confirmed Coordination Link' : 'Candidate Overlap Nexus',
+      title: `Nexus: ${caseAId || 'Case A'} ↔ ${caseBId || 'Case B'}`,
       id: overlapId || 'OVL-Nexus',
-      description: summary || `Algorithmic linkage across ${caseABureau} & ${caseBBureau}.`,
+      description: summary || `Algorithmic correlation identified between ${caseABureau} & ${caseBBureau}.`,
       actionLabel: overlapId ? 'Open Dual Case Comparison' : null,
       actionPath: overlapId ? `/compare/${encodeURIComponent(overlapId)}` : null,
       attributes: [
         { label: 'Overlap Identifier', value: overlapId || 'Auto-generated' },
-        { label: 'Correlation Score', value: score !== null ? `${score}% Match` : 'Calculated' },
-        { label: 'Review Determination', value: overlapStatus },
-        { label: 'Evidence Signals', value: `${matchReasons.length} signal(s)` }
+        { label: 'Algorithmic Score', value: score !== null ? `${score}% Match` : 'Calculated' },
+        { label: 'Review Determination', value: rawStatus },
+        { label: 'Evidence Signals', value: `${matchReasons.length} signal(s) recorded` }
       ]
     }
   };
+
+  // Add dynamically discovered shared entity nodes if available in backend response
+  if (sharedEntities && sharedEntities.length > 0) {
+    sharedEntities.forEach((ent, idx) => {
+      const entKey = `sharedEntity_${idx}`;
+      nodeDetails[entKey] = {
+        type: 'Shared Taxonomy / Evidence Concept',
+        title: ent.title || ent.name || `Shared Entity ${idx + 1}`,
+        id: ent.id || `ENT-${idx + 1}`,
+        description: ent.description || 'Shared entity across concurrent proceedings.',
+        actionLabel: null,
+        actionPath: null,
+        attributes: [
+          { label: 'Entity Type', value: ent.type || 'Contextual Match' },
+          { label: 'Evidence Value', value: ent.value || 'Corroborated' }
+        ]
+      };
+    });
+  }
 
   const activeDetail = nodeDetails[selectedNode] || nodeDetails.overlap;
 
@@ -168,7 +271,7 @@ export default function RelationshipGraph({
           <button
             type="button"
             onClick={() => setZoomLevel((z) => Math.min(1.3, z + 0.1))}
-            className="p-1.5 rounded bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
+            className="p-1.5 rounded bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors"
             title="Zoom In"
           >
             <ZoomIn className="w-3.5 h-3.5" />
@@ -176,7 +279,7 @@ export default function RelationshipGraph({
           <button
             type="button"
             onClick={() => setZoomLevel((z) => Math.max(0.7, z - 0.1))}
-            className="p-1.5 rounded bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
+            className="p-1.5 rounded bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors"
             title="Zoom Out"
           >
             <ZoomOut className="w-3.5 h-3.5" />
@@ -184,11 +287,32 @@ export default function RelationshipGraph({
           <button
             type="button"
             onClick={() => setZoomLevel(1)}
-            className="p-1.5 rounded bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
+            className="p-1.5 rounded bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors"
             title="Reset Zoom"
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </button>
+        </div>
+      </div>
+
+      {/* Heuristic Score Notice Banner */}
+      <div className="bg-amber-50/70 border-b border-amber-200 px-4 py-2 flex items-center justify-between text-xs text-amber-900">
+        <div className="flex items-center gap-1.5">
+          <AlertTriangle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+          <span>
+            <strong>Algorithmic Heuristic Notice:</strong> Match scores represent heuristic convergence and do not constitute a confirmed statutory decision until reviewed by an authorized officer.
+          </span>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0 font-medium">
+          {isConfirmed ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+              <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Human-Confirmed
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-100 text-amber-800 border border-amber-300">
+              Candidate Overlap (Pending Review)
+            </span>
+          )}
         </div>
       </div>
 
@@ -211,8 +335,8 @@ export default function RelationshipGraph({
               Complaint Cases
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-              Cross-Bureau Nexus
+              <span className={`w-2.5 h-2.5 rounded-full ${isConfirmed ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+              {isConfirmed ? 'Confirmed Link' : 'Candidate Nexus'}
             </span>
           </div>
 
@@ -248,7 +372,7 @@ export default function RelationshipGraph({
                       </div>
                     </div>
                   </div>
-                  {instId !== '—' && (
+                  {instId && instId !== '—' && (
                     <button
                       type="button"
                       onClick={(e) => {
@@ -265,7 +389,7 @@ export default function RelationshipGraph({
               </div>
             </div>
 
-            {/* Connecting Lines Institution to Bureaus */}
+            {/* Connecting Lines: Institution to Bureaus */}
             <div className="relative flex justify-around text-xs text-slate-400 font-mono">
               <div className="flex flex-col items-center">
                 <div className="w-px h-5 bg-slate-300" />
@@ -319,16 +443,18 @@ export default function RelationshipGraph({
                   </div>
                   <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
                     <span>Click to inspect</span>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        navigate(`/cases/${encodeURIComponent(caseAId)}`);
-                      }}
-                      className="text-aicte-blue hover:underline flex items-center gap-0.5"
-                    >
-                      Open Dossier <ExternalLink className="w-3 h-3" />
-                    </button>
+                    {caseAId && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/cases/${encodeURIComponent(caseAId)}`);
+                        }}
+                        className="text-aicte-blue hover:underline flex items-center gap-0.5"
+                      >
+                        Open Dossier <ExternalLink className="w-3 h-3" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -371,26 +497,30 @@ export default function RelationshipGraph({
                   </div>
                   <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
                     <span>Click to inspect</span>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        navigate(`/cases/${encodeURIComponent(caseBId)}`);
-                      }}
-                      className="text-aicte-blue hover:underline flex items-center gap-0.5"
-                    >
-                      Open Dossier <ExternalLink className="w-3 h-3" />
-                    </button>
+                    {caseBId && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/cases/${encodeURIComponent(caseBId)}`);
+                        }}
+                        className="text-aicte-blue hover:underline flex items-center gap-0.5"
+                      >
+                        Open Dossier <ExternalLink className="w-3 h-3" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Connecting Lines Cases to Overlap Nexus */}
+            {/* Connecting Lines: Cases to Overlap Nexus */}
             <div className="relative flex justify-center text-xs text-slate-400 font-mono">
               <div className="flex flex-col items-center">
                 <div className="w-px h-4 bg-slate-300" />
-                <span className="text-[9px] uppercase tracking-wider text-rose-500 font-bold">algorithmic correlation</span>
+                <span className={`text-[9px] uppercase tracking-wider font-bold ${isConfirmed ? 'text-emerald-600' : 'text-amber-600'}`}>
+                  {isConfirmed ? 'confirmed coordination link' : 'candidate correlation nexus'}
+                </span>
                 <div className="w-px h-3 bg-slate-300" />
               </div>
             </div>
@@ -401,14 +531,18 @@ export default function RelationshipGraph({
                 onClick={() => setSelectedNode('overlap')}
                 className={`p-3.5 rounded-lg border text-center cursor-pointer transition-all ${
                   selectedNode === 'overlap'
-                    ? 'ring-2 ring-rose-500 bg-rose-50 border-rose-300 shadow-sm'
+                    ? isConfirmed
+                      ? 'ring-2 ring-emerald-500 bg-emerald-50 border-emerald-300 shadow-sm'
+                      : 'ring-2 ring-amber-500 bg-amber-50 border-amber-300 shadow-sm'
+                    : isConfirmed
+                    ? 'bg-emerald-50/60 border-emerald-300 hover:bg-emerald-50'
                     : 'bg-amber-50/70 border-amber-300 hover:bg-amber-50'
                 }`}
               >
                 <div className="flex items-center justify-center gap-2">
-                  <GitMerge className="w-4 h-4 text-rose-600" />
-                  <span className="text-xs font-bold text-rose-900 uppercase tracking-wide">
-                    Cross-Bureau Overlap Correlation {score !== null ? `(${score}% Match)` : ''}
+                  <GitMerge className={`w-4 h-4 ${isConfirmed ? 'text-emerald-700' : 'text-amber-700'}`} />
+                  <span className={`text-xs font-bold uppercase tracking-wide ${isConfirmed ? 'text-emerald-950' : 'text-amber-950'}`}>
+                    {isConfirmed ? 'Human-Confirmed Coordination' : 'Cross-Bureau Candidate Overlap'} {score !== null ? `(${score}% Match)` : ''}
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-600 mt-1 max-w-lg mx-auto line-clamp-2">
@@ -423,6 +557,31 @@ export default function RelationshipGraph({
                 )}
               </div>
             </div>
+
+            {/* LEVEL 4: Shared Taxonomy / Evidence Concept Nodes (when present in backend response) */}
+            {sharedEntities && sharedEntities.length > 0 && (
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                {sharedEntities.slice(0, 2).map((ent, idx) => (
+                  <div
+                    key={idx}
+                    onClick={() => setSelectedNode(`sharedEntity_${idx}`)}
+                    className={`p-2.5 rounded-md border text-left cursor-pointer transition-all ${
+                      selectedNode === `sharedEntity_${idx}`
+                        ? 'ring-2 ring-amber-500 bg-amber-50 border-amber-300'
+                        : 'bg-white border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="text-[10px] font-bold text-amber-800 uppercase flex items-center gap-1">
+                      <Layers className="w-3 h-3 text-amber-600" />
+                      {ent.type || 'Shared Subject Concept'}
+                    </div>
+                    <div className="text-xs font-semibold text-slate-800 mt-0.5 truncate">
+                      {ent.title || ent.name || `Entity ${idx + 1}`}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
