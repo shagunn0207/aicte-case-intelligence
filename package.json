@@ -9,11 +9,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "es-toolkit": "^1.53.0",
     "lucide-react": "^0.475.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.1",
-    "recharts": "^3.10.1"
+    "recharts": "^3.10.1",
+    "tinyglobby": "^0.2.13"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",

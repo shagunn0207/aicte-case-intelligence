@@ -10,7 +10,10 @@ import {
   Send,
   AlertOctagon,
   Sparkles,
-  ShieldCheck
+  ShieldCheck,
+  Pencil,
+  Activity,
+  Calendar
 } from 'lucide-react';
 import { getOverlapById, getCaseComparison, submitCoordinationReview } from '../services/overlapApi';
 import PageHeader from '../components/common/PageHeader';
@@ -22,9 +25,10 @@ import ErrorState from '../components/common/ErrorState';
 import { REVIEW_DECISION_OPTIONS, formatDate, formatDateTime } from '../utils/formatters';
 import { getCaseById, updateCase, postCaseAction, getCaseLinks } from '../services/caseApi';
 import RecordActionModal from '../components/common/RecordActionModal';
+import EditCaseModal from '../components/common/EditCaseModal';
 import ActionTimeline from '../components/overlaps/ActionTimeline';
 
-export default function CaseDetails({ mode = 'compare' }) {
+export default function CaseDetails({ mode = 'single' }) {
   const { overlapId, caseId } = useParams();
 
   const [loading, setLoading] = useState(true);
@@ -35,6 +39,8 @@ export default function CaseDetails({ mode = 'compare' }) {
   const [caseA, setCaseA] = useState(null);
   const [caseB, setCaseB] = useState(null);
   const [singleCase, setSingleCase] = useState(null);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isActionOpen, setIsActionOpen] = useState(false);
 
   // Review Form States (Unified on comparison page)
   const [selectedDecision, setSelectedDecision] = useState('');
@@ -79,6 +85,12 @@ export default function CaseDetails({ mode = 'compare' }) {
     } catch (err) {
       alert('Failed to record action');
     }
+  };
+
+  const handleRefresh = async () => {
+    if (!singleCase) return;
+    const refreshed = await getCaseById(singleCase.caseId);
+    setSingleCase(refreshed);
   };
 
   useEffect(() => {
@@ -173,23 +185,40 @@ export default function CaseDetails({ mode = 'compare' }) {
   // Single Case View (if accessed directly by caseId)
   if (mode === 'single' || (!overlapId && caseId && singleCase)) {
     return (
+      <>
       <div className="space-y-6 max-w-4xl mx-auto">
         <PageHeader
           breadcrumbs={[
-            { label: 'Overlaps Dashboard', path: '/overlaps' },
+            { label: 'All Cases', path: '/cases' },
             { label: singleCase.caseId }
           ]}
           title={`Case File: ${singleCase.caseId}`}
-          subtitle={singleCase.title}
-          badge={<BureauBadge code={singleCase.bureauCode} showFullName />}
+          subtitle={singleCase.category}
+          badge={<BureauBadge code={singleCase.bureau} showFullName />}
           actions={
-            <Link
-              to="/overlaps"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-xs"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              Back to Dashboard
-            </Link>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsEditOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-aicte-navy text-white text-xs font-semibold hover:bg-aicte-navy-light shadow-xs"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                Edit Case
+              </button>
+              <button
+                onClick={() => setIsActionOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-700 text-white text-xs font-semibold hover:bg-emerald-800 shadow-xs"
+              >
+                <Activity className="w-3.5 h-3.5" />
+                Record Action
+              </button>
+              <Link
+                to="/cases"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-xs"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                Back to Cases
+              </Link>
+            </div>
           }
         />
 
@@ -202,7 +231,7 @@ export default function CaseDetails({ mode = 'compare' }) {
             </div>
             <div>
               <span className="text-slate-400 font-bold uppercase text-[10px]">Desk Officer</span>
-              <div className="font-semibold text-slate-800 mt-0.5">{singleCase.deskOfficer}</div>
+              <div className="font-semibold text-slate-800 mt-0.5">{singleCase.assignedOfficer}</div>
             </div>
             <div>
               <span className="text-slate-400 font-bold uppercase text-[10px]">Status</span>
@@ -213,7 +242,7 @@ export default function CaseDetails({ mode = 'compare' }) {
           <div>
             <h4 className="text-xs font-bold uppercase text-slate-700 mb-1">Description</h4>
             <p className="text-xs text-slate-700 leading-relaxed bg-slate-50/70 p-3 rounded border border-slate-200">
-              {singleCase.summary}
+              {singleCase.description}
             </p>
           </div>
 
@@ -229,8 +258,103 @@ export default function CaseDetails({ mode = 'compare' }) {
               </ul>
             </div>
           )}
+
+          {/* ── Action History ─────────────────────────────────── */}
+          <div className="pt-2 border-t border-slate-100">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-xs font-bold uppercase text-slate-700 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-aicte-blue" />
+                Action History
+              </h4>
+              <span className="text-[11px] font-mono text-slate-400">
+                {(singleCase.actionHistory || []).length} record(s)
+              </span>
+            </div>
+
+            {(!singleCase.actionHistory || singleCase.actionHistory.length === 0) ? (
+              <div className="text-xs text-slate-500 py-6 text-center bg-slate-50 rounded border border-dashed border-slate-300">
+                No actions recorded yet for this case.
+              </div>
+            ) : (
+              <div className="relative pl-5 space-y-3 before:absolute before:left-[7px] before:top-2 before:bottom-2 before:w-px before:bg-slate-200">
+                {[...(singleCase.actionHistory)]
+                  .sort((a, b) => new Date(b.action_date || 0) - new Date(a.action_date || 0))
+                  .map((action, idx) => (
+                    <div key={action.id || idx} className="relative">
+                      <div className="absolute -left-5 top-1.5 w-3.5 h-3.5 rounded-full bg-white border-2 border-aicte-navy flex items-center justify-center">
+                        <div className="w-1.5 h-1.5 rounded-full bg-aicte-navy" />
+                      </div>
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs space-y-2 hover:bg-white hover:shadow-xs transition-all">
+                        {/* Title row */}
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <span className="font-semibold text-slate-900 leading-snug">
+                            {action.action_taken}
+                          </span>
+                          {action.action_date && (
+                            <span className="flex items-center gap-1 text-slate-400 font-mono text-[11px] shrink-0">
+                              <Calendar className="w-3 h-3" />
+                              {formatDate(action.action_date)}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Remarks */}
+                        {action.remarks && (
+                          <p className="text-slate-600 leading-relaxed bg-white px-2.5 py-2 rounded border border-slate-200 font-mono text-[11px] italic">
+                            &ldquo;{action.remarks}&rdquo;
+                          </p>
+                        )}
+
+                        {/* Meta row */}
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1.5 border-t border-slate-100 text-[11px] text-slate-500">
+                          {action.action_by && (
+                            <span className="flex items-center gap-1">
+                              <User className="w-3 h-3 text-slate-400" />
+                              By: <strong className="text-slate-700 ml-0.5">{action.action_by}</strong>
+                            </span>
+                          )}
+                          {action.next_action && (
+                            <span>
+                              Next: <strong className="text-slate-700">{action.next_action}</strong>
+                            </span>
+                          )}
+                          {(action.previous_status || action.new_status) && (
+                            <span className="flex items-center gap-1">
+                              <span className="px-1.5 py-0.5 rounded bg-slate-200 font-mono text-[10px]">
+                                {action.previous_status || '—'}
+                              </span>
+                              <span className="text-slate-400">→</span>
+                              <span className="px-1.5 py-0.5 rounded bg-aicte-navy/10 text-aicte-navy font-mono font-semibold text-[10px]">
+                                {action.new_status || '—'}
+                              </span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Edit Case Modal */}
+      <EditCaseModal
+        isOpen={isEditOpen}
+        onClose={() => setIsEditOpen(false)}
+        caseData={singleCase?._raw}
+        onRefresh={handleRefresh}
+      />
+
+      {/* Record Action Modal */}
+      <RecordActionModal
+        isOpen={isActionOpen}
+        onClose={() => setIsActionOpen(false)}
+        caseId={singleCase?.caseId}
+        onRefresh={handleRefresh}
+      />
+      </>
     );
   }
 
@@ -463,11 +587,10 @@ export default function CaseDetails({ mode = 'compare' }) {
                         setValidationErrors({ ...validationErrors, decision: null });
                       }
                     }}
-                    className={`p-3.5 rounded-lg border-2 cursor-pointer transition-all flex flex-col justify-between ${
-                      isSelected
-                        ? `${opt.colorClass} shadow-xs ring-1 ring-offset-1`
-                        : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/60'
-                    }`}
+                    className={`p-3.5 rounded-lg border-2 cursor-pointer transition-all flex flex-col justify-between ${isSelected
+                      ? `${opt.colorClass} shadow-xs ring-1 ring-offset-1`
+                      : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/60'
+                      }`}
                   >
                     <div>
                       <div className="flex items-center justify-between mb-1">
@@ -599,11 +722,10 @@ export default function CaseDetails({ mode = 'compare' }) {
             {overlapData.reviewHistory.map((entry, idx) => (
               <div
                 key={entry.id || idx}
-                className={`p-3 rounded border text-xs ${
-                  entry.isDemoSubmission
-                    ? 'bg-slate-50 border-blue-200'
-                    : 'bg-slate-50 border-slate-200'
-                }`}
+                className={`p-3 rounded border text-xs ${entry.isDemoSubmission
+                  ? 'bg-slate-50 border-blue-200'
+                  : 'bg-slate-50 border-slate-200'
+                  }`}
               >
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
                   <div className="flex items-center gap-2">

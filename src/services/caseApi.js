@@ -22,8 +22,34 @@ export async function fetchCases(params = {}) {
  * Get case details.
  * GET /api/cases/{case_id}
  */
+function mapCaseResponse(data) {
+  if (!data) return data;
+  return {
+    caseId: data.case_id,
+    institutionId: data.institution_id,
+    institutionName: data.institution?.name,
+    category: data.category,
+    description: data.description,
+    bureau: data.bureau,
+    status: data.status,
+    assignedOfficer: data.assigned_officer,
+    receivedDate: data.received_date,
+    dueDate: data.due_date,
+    lastAction: data.last_action,
+    nextAction: data.next_action,
+    lastActionAt: data.last_action_at,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+    institution: data.institution,
+    actionHistory: data.action_history,
+    // Raw snake_case payload — passed to EditCaseModal which expects original field names
+    _raw: data,
+  };
+}
+
 export async function getCaseById(caseId) {
-  return await apiRequest(`/cases/${encodeURIComponent(caseId)}`);
+  const raw = await apiRequest(`/cases/${encodeURIComponent(caseId)}`);
+  return mapCaseResponse(raw);
 }
 
 /**
