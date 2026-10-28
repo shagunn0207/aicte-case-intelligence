@@ -93,7 +93,7 @@ export default function Institutions() {
                 <td className="px-4 py-2 text-center">—</td>
                 <td className="px-4 py-2">
                   <button
-                    onClick={() => navigate(`/institutions/${encodeURIComponent(inst.institution_id)}`)}
+                    onClick={() => navigate(`/institutions/${encodeURIComponent(inst.institution_id)}/relationship-map`)}
                     className="px-3 py-1 bg-aicte-navy text-white rounded text-sm"
                   >
                     View

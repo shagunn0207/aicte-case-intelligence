@@ -8,6 +8,7 @@ import NotFound from './pages/NotFound';
 import Dashboard from './pages/Dashboard';
 import Institutions from './pages/Institutions';
 import InstitutionProfile from './pages/InstitutionProfile';
+import Institution360Map from './pages/Institution360Map';
 import AllCases from './pages/AllCases';
 
 export default function App() {
@@ -21,6 +22,7 @@ export default function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/institutions" element={<Institutions />} />
         <Route path="/institutions/:institutionId" element={<InstitutionProfile />} />
+        <Route path="/institutions/:institutionId/relationship-map" element={<Institution360Map />} />
         <Route path="/cases" element={<AllCases />} />
 
         {/* Existing Person 2 routes */}
