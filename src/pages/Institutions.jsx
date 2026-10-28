@@ -4,7 +4,7 @@ import { fetchInstitutions } from '../services/institutionApi';
 import LoadingState from '../components/common/LoadingState';
 import ErrorState from '../components/common/ErrorState';
 import EmptyState from '../components/common/EmptyState';
-import { Search } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 
 export default function Institutions() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -16,13 +16,17 @@ export default function Institutions() {
   const q = searchParams.get('q') || '';
   const page = Number(searchParams.get('page') || 1);
   const pageSize = Number(searchParams.get('page_size') || 10);
+  // 'pending' filter applied when status=pending is in the URL
+  const statusFilter = searchParams.get('status') || '';
 
   useEffect(() => {
     async function load() {
       setLoading(true);
       setError(null);
       try {
-        const result = await fetchInstitutions({ q, page, page_size: pageSize });
+        const params = { q, page, page_size: pageSize };
+        if (statusFilter) params.status = statusFilter;
+        const result = await fetchInstitutions(params);
         setData(result);
       } catch (err) {
         setError(err);
@@ -31,7 +35,7 @@ export default function Institutions() {
       }
     }
     load();
-  }, [q, page, pageSize]);
+  }, [q, page, pageSize, statusFilter]);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -41,24 +45,82 @@ export default function Institutions() {
     if (value) params.q = value;
     params.page = 1;
     params.page_size = pageSize;
+    // Preserve any active status filter when searching
+    if (statusFilter) params.status = statusFilter;
+    setSearchParams(params);
+  };
+
+  const clearPendingFilter = () => {
+    const params = {};
+    if (q) params.q = q;
+    params.page = 1;
+    params.page_size = pageSize;
     setSearchParams(params);
   };
 
   const goToPage = (newPage) => {
     const params = { q, page: newPage, page_size: pageSize };
+    if (statusFilter) params.status = statusFilter;
     setSearchParams(params);
   };
 
   if (loading) return <LoadingState message="Loading institutions..." />;
   if (error) return <ErrorState error={error} onRetry={() => setLoading(true)} />;
-  if (!data || data.items?.length === 0) return <EmptyState title="No institutions found" description="Try adjusting the search criteria." />;
 
-  const { items = [], total = 0 } = data;
+  const { items = [], total = 0 } = data || {};
   const totalPages = Math.ceil(total / pageSize);
+
+  const isPendingFilter = statusFilter.toLowerCase() === 'pending';
+
+  // Empty state: differentiate between "no institutions at all" and "none match the filter"
+  if (!data || items.length === 0) {
+    return (
+      <div className="p-8 space-y-6">
+        <h1 className="text-2xl font-bold mb-4">Institutions</h1>
+        {isPendingFilter && (
+          <div className="flex items-center gap-2 mb-2">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-300">
+              ⏳ Pending Filter Active
+            </span>
+            <button
+              onClick={clearPendingFilter}
+              className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 underline"
+            >
+              <X className="w-3 h-3" /> Clear filter
+            </button>
+          </div>
+        )}
+        <EmptyState
+          title={isPendingFilter ? 'No institutions with pending cases' : 'No institutions found'}
+          description={
+            isPendingFilter
+              ? 'There are currently no institutions with active (Pending, Under Process, Escalated or Transferred) complaint cases.'
+              : 'Try adjusting the search criteria.'
+          }
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="p-8 space-y-6">
       <h1 className="text-2xl font-bold mb-4">Institutions</h1>
+
+      {/* Active pending filter badge */}
+      {isPendingFilter && (
+        <div className="flex items-center gap-2 -mt-2 mb-2">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-300">
+            ⏳ Showing institutions with pending cases
+          </span>
+          <button
+            onClick={clearPendingFilter}
+            className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 underline"
+          >
+            <X className="w-3 h-3" /> Clear filter
+          </button>
+        </div>
+      )}
+
       <form onSubmit={handleSearch} className="flex gap-2 mb-4">
         <input
           name="search"
@@ -106,25 +168,27 @@ export default function Institutions() {
       </div>
 
       {/* Pagination */}
-      <div className="flex justify-center items-center gap-4 mt-4">
-        <button
-          disabled={page <= 1}
-          onClick={() => goToPage(page - 1)}
-          className="px-3 py-1 bg-slate-200 rounded disabled:opacity-50"
-        >
-          Prev
-        </button>
-        <span>
-          Page {page} of {totalPages}
-        </span>
-        <button
-          disabled={page >= totalPages}
-          onClick={() => goToPage(page + 1)}
-          className="px-3 py-1 bg-slate-200 rounded disabled:opacity-50"
-        >
-          Next
-        </button>
-      </div>
+      {totalPages > 1 && (
+        <div className="flex justify-center items-center gap-4 mt-4">
+          <button
+            disabled={page <= 1}
+            onClick={() => goToPage(page - 1)}
+            className="px-3 py-1 bg-slate-200 rounded disabled:opacity-50"
+          >
+            Prev
+          </button>
+          <span>
+            Page {page} of {totalPages}
+          </span>
+          <button
+            disabled={page >= totalPages}
+            onClick={() => goToPage(page + 1)}
+            className="px-3 py-1 bg-slate-200 rounded disabled:opacity-50"
+          >
+            Next
+          </button>
+        </div>
+      )}
     </div>
   );
 }

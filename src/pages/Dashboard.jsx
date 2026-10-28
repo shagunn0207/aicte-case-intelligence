@@ -1,5 +1,6 @@
 // src/pages/Dashboard.jsx
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { fetchDashboardData } from '../services/dashboardApi';
 import KpiCard from '../components/dashboard/KpiCard';
 import BarChart from '../components/dashboard/BarChart';
@@ -9,6 +10,7 @@ export default function Dashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     async function load() {
@@ -37,8 +39,18 @@ export default function Dashboard() {
   }
 
   const stats = [
-    { title: 'Total Cases', value: data?.total_cases ?? 0, icon: '📊' },
-    { title: 'Pending', value: data?.pending_cases ?? 0, icon: '⏳' },
+    {
+      title: 'Total Cases',
+      value: data?.total_cases ?? 0,
+      icon: '📊',
+      onClick: () => navigate('/institutions'),
+    },
+    {
+      title: 'Pending',
+      value: data?.pending_cases ?? 0,
+      icon: '⏳',
+      onClick: () => navigate('/institutions?status=pending'),
+    },
     { title: 'Under Process', value: data?.under_process_cases ?? 0, icon: '⚙️' },
     { title: 'Disposed', value: data?.disposed_cases ?? 0, icon: '✅' },
     { title: 'Transferred', value: data?.transferred_cases ?? 0, icon: '🔁' },
@@ -48,19 +60,36 @@ export default function Dashboard() {
     { title: 'Approaching Deadline', value: data?.cases_approaching_deadline ?? 0, icon: '⌛' },
   ];
 
-  const bureauWorkload = (data?.bureau_wise_workload ?? []).map(item => ({ bureau: item.bureau, count: item.case_count }));
-  const statusDistribution = (data?.status_distribution ?? []).map(item => ({ name: item.status, value: item.count }));
-  const regionCases = (data?.region_wise_cases ?? []).map(item => ({ region: item.region, count: item.case_count }));
+  const bureauWorkload = (data?.bureau_wise_workload ?? []).map((item) => ({
+    bureau: item.bureau,
+    count: item.case_count,
+  }));
+  const statusDistribution = (data?.status_distribution ?? []).map((item) => ({
+    name: item.status,
+    value: item.count,
+  }));
+  const regionCases = (data?.region_wise_cases ?? []).map((item) => ({
+    region: item.region,
+    count: item.case_count,
+  }));
 
   return (
     <div className="p-6 md:p-8 space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Executive Dashboard</h1>
-        <p className="mt-1 text-sm text-slate-500">Overview of complaint cases across AICTE bureaus and regions.</p>
+        <p className="mt-1 text-sm text-slate-500">
+          Overview of complaint cases across AICTE bureaus and regions.
+        </p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {stats.map(stat => (
-          <KpiCard key={stat.title} title={stat.title} value={stat.value} icon={stat.icon} />
+        {stats.map((stat) => (
+          <KpiCard
+            key={stat.title}
+            title={stat.title}
+            value={stat.value}
+            icon={stat.icon}
+            onClick={stat.onClick}
+          />
         ))}
       </div>
       <section>

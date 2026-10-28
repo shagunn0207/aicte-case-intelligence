@@ -7,16 +7,15 @@ import {
   Building2,
   Menu,
   X,
-  Home,
-  FileStack
 } from 'lucide-react';
 
 export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // Dashboard and Institutions are intentionally excluded from the top nav bar.
+  // Users navigate to Institutions via the Dashboard KPI cards (Total Cases / Pending),
+  // and back to Dashboard via the logo link.
   const navLinks = [
-    { to: '/dashboard', label: 'Dashboard', icon: Home },
-    { to: '/institutions', label: 'Institutions', icon: FileStack },
     { to: '/cases', label: 'All Cases', icon: Layers },
     { to: '/overlaps', label: 'Overlap Dashboard', icon: Layers },
     { to: '/compare/OVL-2026-0814', label: 'Compare & Review', icon: GitCompare },
@@ -45,8 +44,8 @@ export default function Navbar() {
       {/* Main Navigation Bar */}
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex items-center justify-between h-14">
-          {/* Platform Identity */}
-          <Link to="/overlaps" className="flex items-center gap-2.5 group">
+          {/* Platform Identity — links to Dashboard */}
+          <Link to="/dashboard" className="flex items-center gap-2.5 group">
             <div className="w-8 h-8 rounded-lg bg-aicte-navy text-white flex items-center justify-center font-bold shadow-xs group-hover:bg-aicte-blue transition-colors">
               <Shield className="w-4 h-4 text-amber-400" />
             </div>
@@ -55,7 +54,7 @@ export default function Navbar() {
                 AICTE Case Intelligence
               </span>
               <span className="text-[11px] text-slate-500 block leading-tight">
-                Cross-Bureau Overlap & Coordination Platform
+                Cross-Bureau Overlap &amp; Coordination Platform
               </span>
             </div>
           </Link>
